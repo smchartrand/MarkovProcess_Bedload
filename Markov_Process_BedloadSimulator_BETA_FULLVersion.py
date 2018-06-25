@@ -6,12 +6,14 @@
 import math
 import random
 import time
-
+import os
 import numpy as np
+import matplotlib.cm as cm
+
+from numba import jit
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle
-import matplotlib.cm as cm
 
 start_time = time.time()
 #
@@ -50,8 +52,8 @@ OpenCLStore = np.array([])
 color_iter = 1000
 # Milestones used to display calculation progress.
 milestones = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99, 100]
-# Initialize the step counter.
-step = 1
+# Initialize the step counter for part 1.
+step_1 = 1
 # Circle perimeter coordinate calculations.
 theta = np.arange(0, (2 * math.pi), 0.01)
 # Define origin for plotting.
@@ -71,7 +73,7 @@ y_max = 100
 Grid_Spacing = 2.0
 # Size of largest grain relative to the cross-stream length
 Size_Frac = 0.06
-#Time threshold to restart script
+# Time threshold to restart script
 time_threshold = 10
 # DEPENDENT CALCULATIONS
 # Total virtual streambed area.
@@ -139,7 +141,7 @@ def fu_radcheck(x_Center, y_Center, radius):
     y1 = y_Center - radius
     y2 = y1 + (radius * 2)
     coord = [x1, x2, y1, y2]
-    if step == 1:
+    if step_1 == 1:
         newCircle_Found = 1 
     else:
         newCircle_Found = 0 
@@ -212,20 +214,20 @@ while (AreaTotal / Total_VArea) < Pack:
     # CALL FUNCTION
     radius, coord, newCircle_Found = fu_radcheck(x_Center, y_Center, radius)
     # Check to see if radius needs revision for steps greater than the first
-    if step != 1:
+    if step_1 != 1:
         # CALL FUNCTION
         radius, newCircle_Found = fu_diamrevise(x_Center, y_Center, radius)    
     # Only write data if a circle was placed.
     if newCircle_Found == 1:
         # Write data to variables
         # coord = np.array([x1, x2, y1, y2])
-        # This function moves circles in a rectangle to available grid points
+        # This function moves circles in a rectangle to available grid points.
         mask = (((XCoordinates - x_Center) ** 2 + (YCoordinates - y_Center)
                  ** 2) ** 0.5 <= radius)
         # Track which grid points are available for circles and
-        # which are not and pass to the next step in the loop
+        # which are not and pass to the next step in the loop.
         XYCoordinateslogical[np.where(mask == 1)] = 1
-        # Write data to variables
+        # Write data to variables.
         Circle_Area = (np.reshape(np.asfortranarray(math.pi * (radius ** 2),
                                                     dtype=float), (1, +1)))
         Area = np.hstack((Area, Circle_Area))
@@ -233,14 +235,14 @@ while (AreaTotal / Total_VArea) < Pack:
         Coordinates = np.hstack((Coordinates, coord))
         CenterCoordinates = np.hstack((CenterCoordinates, CenterPosition_data))
         Diameter = np.hstack((Diameter, np.reshape(radius * 2, (1, +1))))
-        if step == 1:
+        if step_1 == 1:
             Area = np.delete(Area, 0, 1)
             Coordinates = np.delete(Coordinates, 0, 1)
             CenterCoordinates = np.delete(CenterCoordinates, 0, 1)
             Diameter = np.delete(Diameter, 0, 1)
-        # Advance counter
-        step = step + 1
-        # Calculate the percent completion of simulation and print to console
+        # Advance counter.
+        step_1 = step_1 + 1
+        # Calculate the percent completion of simulation and print to console.
         percentage_complete = (100.0 * (AreaTotal / Total_VArea)/Pack)
         while len(milestones) > 0 and percentage_complete >= milestones[0]:
             print "{}% complete".format(milestones[0])
@@ -252,7 +254,7 @@ while (AreaTotal / Total_VArea) < Pack:
     current_time = time.time()
     if (current_time - start_time) > time_threshold:
         start_time = time.time()
-        step = 1
+        step_1 = 1
         percentage_complete = 0
         # Circle area.
         Area = np.zeros([1, 1], dtype=int, order='F')
@@ -289,7 +291,7 @@ YCenter = np.reshape(CenterCoordinates[1, :], (1, len(CenterCoordinates[0])))
 YCenter = YCenter.reshape(-1)
 plt.rcParams['image.cmap'] = 'gray'
 # This method of plotting circles comes from Stack Overflow questions/32444037
-# Note that the patches won't be added to the axes, instead a collection will
+# Note that the patches won't be added to the axes, instead a collection will.
 patches = []
 for x1, y1, r in zip(XCenter, YCenter, Radius_Array):
     circle = Circle((x1, y1), r)
@@ -301,16 +303,101 @@ p.set_array(colors)
 p.set_clim([5, 950])
 ax.add_collection(p)
 plt.show()
-# Need to insert some commands to write files to subdirectory
-fig.savefig('Starting_Bed.pdf', format='pdf', dpi=2400)
-# Save files for 3D plotting
-np.save('XCenter', XCenter)
-np.save('YCenter', YCenter)
-np.save('Radius_Array', Radius_Array)
+# Need to insert some commands to write files to subdirectory.
+# os.makedirs('\\ScriptTest')
+fig.savefig('.\ScriptTest\Starting_Bed.pdf', format='pdf', dpi=2400)
+# Save initial results for archiving and plotting.
+np.save('.\ScriptTest\XCenter_Initial', XCenter)
+np.save('.\ScriptTest\YCenter_Initial', YCenter)
+np.save('.\ScriptTest\Radius_Array_Initial', Radius_Array)
 # END OF PART 1 VIRTUAL BED CREATION
 ###############################################################################
 ###############################################################################
-# PART 
+# PART 2
+# 
+# STEP ONE: DEFINE DATA STRUCTURES, INITIALIZE SOME VARIABLES.
+# DATA LISTS
+# Upstream particle supply rate (particles/t).
+Nu_in = np.zeros([1, 1], dtype=int, order='F')
+# Downstream particle emigration rate (particles/t).
+Nu_out = np.zeros([1, 1], dtype=int, order='F')
+# Particle birth or entrainment rate within the control volume (particle/t).
+# Set birth rate as a constant value for trial runs
+Lambda_1 = 3
+# Entrainment events per unit area of the bed and unit time (events/t)
+k_events = np.zeros([1, 1], dtype=int, order='F')
+# Particle death or deposition rate within the control volume (1/t).
+Sigma = np.zeros([1, 1], dtype=int, order='F')
+# Particle travel time (t).
+T_p = np.zeros([1, 1], dtype=int, order='F')
+# Particle travel time minimum (t).
+T_pmin = 0
+# Particle travel time maximum (t).
+T_pmax = 1.0
+# Particle hop distance (L).
+L_x = np.zeros([1, 1], dtype=int, order='F')
+# Initialize the step counter for part 2.
+step_2 = 1
+# Temporary loop completion criteria
+loops = 10
+# END SECTION
 #
-# STEP ONE:
+# STEP TWO: DIVIDE THE BED INTO SAMPLING REGIONS AND BUILD SAMPLING ARRAY
+# Number of bed sampling regions within the control volume V_c
+Bed_sampreg = 10
+# Index to hold boundaries between subsampling regions to facilitate random
+# sampling from within each region.
+SubSampl_idx = np.zeros([1, Bed_sampreg], dtype=int, order='F')
+# Bed sampling boundaries in the x-direction
+BS_boundaries = XCoordinates_Orig + (x_max / Bed_sampreg) * np.arange(1, Bed_sampreg + 1, dtype=int)
+###############################################################################
+###############################################################################
+# STEP TWO: DEFINE A SEARCH FUNCTION AND ONE TO SPECIFY PARTICLE KINEMATICS
+
+
+@jit(nopython=True)
+def search(item, vec):
+    """return the index of the first occurence of item in vec"""
+    for i in xrange(len(vec)):
+        if vec[i] >= item:
+            return i
+    return -1
+
+def fu_kinematics(x_Center, y_Center, radius):
+    # k is the entrainment events per unit area of the bed
+    k_events = np.random.poisson(Lambda_1,None)
+    # Number of entrained particles not counting immigrants
+    E_particles = k_events * Bed_sampreg
+    # Calculate the travel time as a randomly sampled variable from a uniform
+    # distribution constrained by Fathel et al., 2015.
+    T_p = np.random.uniform(T_pmin,T_pmax,E_particles)
+    # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
+    # For now I am multuplying by 10 so units are consistent (my units are mm)
+    L_x = (T_p ** 2) * 10
+    # Figure out where to randomly entrain particles within the control volume.
+    CenterCoord_sort = CenterCoordinates[:, CenterCoordinates[0].argsort()]
+        
+    # Loop to boundaries between subsampling regions
+    for n in range(0, Bed_sampreg):
+        # Find indices within sort coordinates array for subsampling
+        SubSampl_idx[0,n] = search(BS_boundaries[n],CenterCoord_sort[0,:])
+        # Specify random entrainment sampling indices
+        if n == 0:
+            Entrain_locs = np.random.uniform(0,SubSampl_idx[0,n+1],k_events)
+        else:
+            Entrain_locs = np.random.uniform(SubSampl_idx[0,n-1],SubSampl_idx[0,n],k_events)
+    
+    return radius, coord, newCircle_Found, Nu_out
+###############################################################################
+###############################################################################
+# STEP TWO: ENTRAIN, MOVE AND DEPOSIT PARTICLES IN CONTROL VOLUME
+# Particles are entrained, moved and deposited until a steady-state condition 
+# is met.
+
+
+while step_2 < loops:
+    if step_2 == 1:
+        Nu_in = 0
+        
+# Circle area.
 # END OF CODE
