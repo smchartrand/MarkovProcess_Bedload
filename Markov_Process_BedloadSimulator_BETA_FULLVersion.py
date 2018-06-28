@@ -345,6 +345,7 @@ loops = 10
 # STEP TWO: DIVIDE THE BED INTO SAMPLING REGIONS AND BUILD SAMPLING ARRAY
 # Number of bed sampling regions within the control volume V_c
 Bed_sampreg = 10
+Entrain_locs = np.zeros([1, 1], dtype=int, order='F')
 # Index to hold boundaries between subsampling regions to facilitate random
 # sampling from within each region.
 SubSampl_idx = np.zeros([1, Bed_sampreg], dtype=int, order='F')
@@ -370,12 +371,14 @@ def fu_kinematics(x_Center, y_Center, radius):
     E_particles = k_events * Bed_sampreg
     # Calculate the travel time as a randomly sampled variable from a uniform
     # distribution constrained by Fathel et al., 2015.
-    T_p = np.random.uniform(T_pmin,T_pmax,E_particles)
+    T_p = (np.random.uniform(T_pmin,T_pmax,E_particles).reshape(1, E_particles))
     # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
-    # For now I am multuplying by 10 so units are consistent (my units are mm)
-    L_x = (T_p ** 2) * 10
+    # For now I am multuplying by 10 so units are consistent ()
+    L_x = np.round((T_p ** 2) * 10, 2)
     # Figure out where to randomly entrain particles within the control volume.
     CenterCoord_sort = CenterCoordinates[:, CenterCoordinates[0].argsort()]
+    # Initialize a variable to store entrainment location information
+    Entrain_locs = np.zeros([Bed_sampreg, k_events], dtype=int, order='F')
         
     # Loop to boundaries between subsampling regions
     for n in range(0, Bed_sampreg):
@@ -383,10 +386,15 @@ def fu_kinematics(x_Center, y_Center, radius):
         SubSampl_idx[0,n] = search(BS_boundaries[n],CenterCoord_sort[0,:])
         # Specify random entrainment sampling indices
         if n == 0:
-            Entrain_locs = np.random.uniform(0,SubSampl_idx[0,n+1],k_events)
+            locs = (np.random.randint(0,SubSampl_idx[0,n],k_events).reshape(1, k_events))
         else:
-            Entrain_locs = np.random.uniform(SubSampl_idx[0,n-1],SubSampl_idx[0,n],k_events)
-    
+            locs = (np.random.randint(SubSampl_idx[0,n-1],SubSampl_idx[0,n],k_events).reshape(1, k_events))
+        Entrain_locs = np.hstack((Entrain_locs, locs))
+        if n == 1:
+            Entrain_locs = np.delete(Entrain_locs, 0, 1)
+    # This is the destination of partciles after the hop distance is applied.
+    # The result returns the destination in the streamwise coordinate only.        
+    Hop_loc = CenterCoord_sort[0,Entrain_locs] + L_x
     return radius, coord, newCircle_Found, Nu_out
 ###############################################################################
 ###############################################################################
@@ -396,8 +404,7 @@ def fu_kinematics(x_Center, y_Center, radius):
 
 
 while step_2 < loops:
-    if step_2 == 1:
-        Nu_in = 0
+    radius, coord, newCircle_Found, Nu_out = fu_kinematics(x_Center, y_Center, radius)
         
 # Circle area.
 # END OF CODE
