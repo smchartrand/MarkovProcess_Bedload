@@ -336,16 +336,22 @@ T_pmin = 0
 T_pmax = 1.0
 # Particle hop distance (L).
 L_x = np.zeros([1, 1], dtype=int, order='F')
+# Parameter to store coordinate and diameter data from step 1
+Particle_details = np.vstack((CenterCoordinates, Diameter))
 # Initialize the step counter for part 2.
-step_2 = 1
+step_2 = 0
 # Temporary loop completion criteria
-loops = 10
+loops = 1
+# Downstream boundary condition x_location. All x_locations downstream of 
+# x_max-DS_Bound will have a fixed surface particle condition for all numerical
+# time steps [L].
+DS_Bound = 10
+DS_Fix = x_max - DS_Bound
 # END SECTION
 #
 # STEP TWO: DIVIDE THE BED INTO SAMPLING REGIONS AND BUILD SAMPLING ARRAY
 # Number of bed sampling regions within the control volume V_c
 Bed_sampreg = 10
-Entrain_locs = np.zeros([1, 1], dtype=int, order='F')
 # Index to hold boundaries between subsampling regions to facilitate random
 # sampling from within each region.
 SubSampl_idx = np.zeros([1, Bed_sampreg], dtype=int, order='F')
@@ -357,45 +363,49 @@ BS_boundaries = XCoordinates_Orig + (x_max / Bed_sampreg) * np.arange(1, Bed_sam
 
 
 @jit(nopython=True)
-def search(item, vec):
+def fu_search(item, vec):
     """return the index of the first occurence of item in vec"""
     for i in xrange(len(vec)):
         if vec[i] >= item:
             return i
     return -1
 
-def fu_kinematics(x_Center, y_Center, radius):
-    # k is the entrainment events per unit area of the bed
-    k_events = np.random.poisson(Lambda_1,None)
-    # Number of entrained particles not counting immigrants
-    E_particles = k_events * Bed_sampreg
-    # Calculate the travel time as a randomly sampled variable from a uniform
-    # distribution constrained by Fathel et al., 2015.
-    T_p = (np.random.uniform(T_pmin,T_pmax,E_particles).reshape(1, E_particles))
-    # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
-    # For now I am multuplying by 10 so units are consistent ()
-    L_x = np.round((T_p ** 2) * 10, 2)
-    # Figure out where to randomly entrain particles within the control volume.
-    CenterCoord_sort = CenterCoordinates[:, CenterCoordinates[0].argsort()]
-    # Initialize a variable to store entrainment location information
-    Entrain_locs = np.zeros([Bed_sampreg, k_events], dtype=int, order='F')
-        
-    # Loop to boundaries between subsampling regions
-    for n in range(0, Bed_sampreg):
-        # Find indices within sort coordinates array for subsampling
-        SubSampl_idx[0,n] = search(BS_boundaries[n],CenterCoord_sort[0,:])
-        # Specify random entrainment sampling indices
-        if n == 0:
-            locs = (np.random.randint(0,SubSampl_idx[0,n],k_events).reshape(1, k_events))
-        else:
-            locs = (np.random.randint(SubSampl_idx[0,n-1],SubSampl_idx[0,n],k_events).reshape(1, k_events))
-        Entrain_locs = np.hstack((Entrain_locs, locs))
-        if n == 1:
-            Entrain_locs = np.delete(Entrain_locs, 0, 1)
-    # This is the destination of partciles after the hop distance is applied.
-    # The result returns the destination in the streamwise coordinate only.        
-    Hop_loc = CenterCoord_sort[0,Entrain_locs] + L_x
-    return radius, coord, newCircle_Found, Nu_out
+#def fu_kinematics(x_Center, y_Center, radius):
+#    # k_events is the entrainment events per unit area of the bed
+#    k_events = np.random.poisson(Lambda_1,None)
+#    # Total number of entrained particles not counting immigrants across V_c
+#    E_particles = k_events * Bed_sampreg
+#    # Calculate the travel time as a randomly sampled variable from a uniform
+#    # distribution constrained by Fathel et al., 2015.
+#    T_p = (np.random.uniform(T_pmin,T_pmax,E_particles).reshape(1, E_particles))
+#    # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
+#    # For now I am multuplying by 10 so units are consistent ()
+#    L_x = np.round((T_p ** 2) * 10, 2)
+#    # Figure out where to randomly entrain particles within the control volume.
+#    CenterCoord_sort = CenterCoordinates[:, CenterCoordinates[0].argsort()]
+#    # Initialize a variable to store entrainment location information
+#    Entrain_locs = np.zeros([1, k_events], dtype=int, order='F')
+#        
+#    # Loop to boundaries between subsampling regions
+#    for n in range(0, Bed_sampreg):
+#        # Find indices within sort coordinates array for subsampling
+#        SubSampl_idx[0,n] = search(BS_boundaries[n],CenterCoord_sort[0,:])
+#        # Specify random entrainment sampling indices
+#        if n == 0:
+#            locs = (np.random.randint(0,SubSampl_idx[0,n],k_events).reshape(1, k_events))
+#        else:
+#            locs = (np.random.randint(SubSampl_idx[0,n-1],SubSampl_idx[0,n],k_events).reshape(1, k_events))
+#        # Write the entrainment location data to a variable
+#        Entrain_locs = np.vstack((Entrain_locs, locs))
+#        # Delete the initialization value b/c it is meaningless
+#        if n == 0:
+#            Entrain_locs = np.delete(Entrain_locs, (0), axis=0)
+#    # This is the destination of partciles after the hop distance is applied.
+#    # The result returns the destination in the streamwise coordinate only.        
+#    Hop_loc = CenterCoord_sort[0,Entrain_locs] + L_x
+#        #if Hop_loc > DS_Fix:
+#            
+#    return radius, coord, newCircle_Found, Nu_out
 ###############################################################################
 ###############################################################################
 # STEP TWO: ENTRAIN, MOVE AND DEPOSIT PARTICLES IN CONTROL VOLUME
@@ -404,7 +414,160 @@ def fu_kinematics(x_Center, y_Center, radius):
 
 
 while step_2 < loops:
-    radius, coord, newCircle_Found, Nu_out = fu_kinematics(x_Center, y_Center, radius)
+#    radius, coord, newCircle_Found, Nu_out = fu_kinematics(x_Center, y_Center, radius)
+    
+    # k_events is the entrainment events per unit area of the bed
+    k_events = np.random.poisson(Lambda_1,None)
+    if k_events == 0:
+        k_events = np.random.poisson(Lambda_1,None)
+    # Total number of entrained particles not counting immigrants across V_c
+    E_particles = k_events * Bed_sampreg
+#    # Calculate the travel time as a randomly sampled variable from a uniform
+#    # distribution constrained by Fathel et al., 2015.
+#    T_p = (np.random.uniform(T_pmin,T_pmax,E_particles).reshape(1, E_particles))
+#    # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
+#    # For now I am multuplying by 10 so units are consistent ()
+#    L_x = np.round((T_p ** 2) * 10, 2)
+    # Figure out where to randomly entrain particles within the control volume.
+    Particle_details_sort = Particle_details[:, Particle_details[0].argsort()]
+    # Initialize two variables to store entrainment location information
+    Entrain_idx = np.zeros([1, k_events], dtype=int, order='F')
+    Entrain_locsx = np.zeros([1, k_events], dtype=int, order='F')
+    Entrain_locsy = np.zeros([1, k_events], dtype=int, order='F')
+    T_p = np.zeros([1, k_events], dtype=int, order='F')
+    L_x = np.zeros([1, k_events], dtype=int, order='F')
+    E_diameter = np.zeros([1, k_events], dtype=int, order='F')
+        
+    # Loop to boundaries between subsampling regions
+    for n in range(0, Bed_sampreg):
+        # Find indices within sort coordinates array for subsampling
+        SubSampl_idx[0,n] = fu_search(BS_boundaries[n],Particle_details_sort[0,:])
+        # Calculate the travel time as a randomly sampled variable from a uniform
+        # distribution constrained by Fathel et al., 2015.
+        T_ptemp = (np.random.uniform(T_pmin,T_pmax,k_events).reshape(1, k_events))
+        # https://stackoverflow.com/questions/2106503/
+        T_ptemp2 = np.log(1-T_ptemp) / (-Lambda_1)
+        # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
+        # For now I am multuplying by 10 so units are consistent ()
+        L_xtemp = np.round((T_ptemp2 ** 2) * 10, 2)
+        # Specify random entrainment sampling indices
+        if n == 0:
+            locs = (np.random.randint(0,SubSampl_idx[0,n],k_events).reshape(1, k_events))
+            # Actual entrainment x-coordinates
+            locs_2 = Particle_details_sort[0,locs]
+            # Actual entrainment y-coordinates
+            locs_3 = Particle_details_sort[1,locs]
+            # Associated entrained particle diameters
+            E_diam = Particle_details_sort[2,locs]
+        else:
+            locs = (np.random.randint(SubSampl_idx[0,n-1],SubSampl_idx[0,n],k_events).reshape(1, k_events))
+            # Actual entrainment x-coordinates
+            locs_2 = Particle_details_sort[0,locs]
+            # Actual entrainment y-coordinates
+            locs_3 = Particle_details_sort[1,locs]
+            # Associated entrained particle diameters
+            E_diam = Particle_details_sort[2,locs]            
+        # Write the entrainment location data to three variables
+        Entrain_idx = np.vstack((Entrain_idx, locs))
+        Entrain_locsx = np.vstack((Entrain_locsx, locs_2))
+        Entrain_locsy = np.vstack((Entrain_locsy, locs_3))
+        T_p = np.vstack((T_p, T_ptemp))
+        L_x = np.vstack((L_x, L_xtemp))
+        E_diameter = np.vstack((E_diameter, E_diam))
+        # Delete the initialization value b/c it is meaningless
+        if n == 0:
+            Entrain_idx = np.delete(Entrain_idx, (0), axis=0)
+            Entrain_locsx = np.delete(Entrain_locsx, (0), axis=0)
+            Entrain_locsy = np.delete(Entrain_locsy, (0), axis=0)
+            T_p = np.delete(T_p, (0), axis=0)
+            L_x = np.delete(L_x, (0), axis=0)
+            E_diameter = np.delete(E_diameter, (0), axis=0)
+    # This is the destination of partciles after the hop distance is applied.
+    # The result returns the destination in the streamwise coordinate only.        
+    Hop_locx = Entrain_locsx + L_x
+    Hop_locy = Entrain_locsy
+    step_2 = step_2 + 1
+    E_radius = E_diameter / 2
+    
+###############################################################################
+## STEP SIX: PRINT RESULTS TO SCREEN AND WRITE PERTINENT RESULTS TO FILE
+print("--- %s seconds ---" % (time.time() - start_time))
+# STEP SIX: PLOT THE RESULTS
+fig = plt.figure(2)
+ax = fig.add_subplot(1, 1, 1, aspect='equal')
+ax.set_xlim((-1, x_max+1))
+ax.set_ylim((-1, y_max+1))
+resolution = 50  # the number of vertices
+Radius_Array = np.asarray((Diameter / 2), dtype=float)
+Radius_Array = Radius_Array.reshape(-1)
+XCenter = np.reshape(CenterCoordinates[0, :], (1, len(CenterCoordinates[0])))
+XCenter = XCenter.reshape(-1)
+YCenter = np.reshape(CenterCoordinates[1, :], (1, len(CenterCoordinates[0])))
+YCenter = YCenter.reshape(-1)
+plt.rcParams['image.cmap'] = 'gray'
+# This method of plotting circles comes from Stack Overflow questions/32444037
+# Note that the patches won't be added to the axes, instead a collection will.
+patches = []
+for x1, y1, r in zip(XCenter, YCenter, Radius_Array):
+    circle = Circle((x1, y1), r)
+    patches.append(circle)
+colors = 1000*np.random.rand(len(CenterCoordinates[0]))
+p = (PatchCollection(patches, cmap=cm.binary,
+                     alpha=0.9, linewidths=(0, )))
+p.set_array(colors)
+p.set_clim([5, 950])
+ax.add_collection(p)
+plt.hold(True)
+#plt.show()
+# This method of plotting circles comes from Stack Overflow questions/32444037
+# Note that the patches won't be added to the axes, instead a collection will.
+#fig = plt.figure(3)
+ax = fig.add_subplot(1, 1, 1, aspect='equal')
+ax.set_xlim((-1, x_max+1))
+ax.set_ylim((-1, y_max+1))
+resolution = 50  # the number of vertices
+XCenter_entrain = np.asarray(Entrain_locsx).ravel()
+YCenter_entrain = np.asarray(Entrain_locsy).ravel()
+E_radius_entrain = np.asarray(E_radius).ravel()
+Hop_XCenter = np.asarray(Hop_locx).ravel()
+Hop_YCenter = np.asarray(Hop_locy).ravel()
+patches = []
+for x1, y1, r in zip(XCenter_entrain, YCenter_entrain, E_radius_entrain):
+    circle = Circle((x1, y1), r)
+    patches.append(circle)
+colors = 1000*np.random.rand(len(CenterCoordinates[0]))
+p = (PatchCollection(patches, cmap=cm.Reds,
+                     alpha=0.9, linewidths=(0, )))
+p.set_array(colors)
+p.set_clim([5, 950])
+plt.hold(True)
+#ax.add_collection(p)
+#plt.show()
+#fig = plt.figure(4)
+#ax = fig.add_subplot(1, 1, 1, aspect='equal')
+#ax.set_xlim((-1, x_max+1))
+#ax.set_ylim((-1, y_max+1))
+#resolution = 50  # the number of vertices
+patches = []
+for x2, y2, r2 in zip(Hop_XCenter, Hop_YCenter, E_radius_entrain):
+    circle = Circle((x2, y2), r2)
+    patches.append(circle)
+colors = 1000*np.random.rand(len(CenterCoordinates[0]))
+p1 = (PatchCollection(patches, cmap=cm.Blues,
+                     alpha=0.9, linewidths=(0, )))
+p1.set_array(colors)
+p1.set_clim([5, 950])
+ax.add_collection(p)
+plt.hold(True)
+ax.add_collection(p1)
+plt.show()
+# Need to insert some commands to write files to subdirectory.
+# os.makedirs('\\ScriptTest')
+fig.savefig('.\ScriptTest\Entrained_Bed_Test2.pdf', format='pdf', dpi=2400)
+# Save initial results for archiving and plotting.
+#np.save('.\ScriptTest\XCenter_Initial', XCenter)
+#np.save('.\ScriptTest\YCenter_Initial', YCenter)
+#np.save('.\ScriptTest\Radius_Array_Initial', Radius_Array)
         
 # Circle area.
 # END OF CODE
