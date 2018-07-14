@@ -305,11 +305,12 @@ ax.add_collection(p)
 plt.show()
 # Need to insert some commands to write files to subdirectory.
 # os.makedirs('\\ScriptTest')
-fig.savefig('.\ScriptTest\Starting_Bed.pdf', format='pdf', dpi=2400)
+# fig.savefig('.\ScriptTest\Starting_Bed.pdf', format='pdf', dpi=2400)
+fig.savefig('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/Starting_Bed.pdf', format='pdf', dpi=2400)
 # Save initial results for archiving and plotting.
-np.save('.\ScriptTest\XCenter_Initial', XCenter)
-np.save('.\ScriptTest\YCenter_Initial', YCenter)
-np.save('.\ScriptTest\Radius_Array_Initial', Radius_Array)
+np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/XCenter_Initial', XCenter)
+np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/YCenter_Initial', YCenter)
+np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/Radius_Array_Initial', Radius_Array)
 # END OF PART 1 VIRTUAL BED CREATION
 ###############################################################################
 ###############################################################################
@@ -336,12 +337,14 @@ T_pmin = 0
 T_pmax = 1.0
 # Particle hop distance (L).
 L_x = np.zeros([1, 1], dtype=int, order='F')
+L_x_Store = []
+L_x_Store_temp = np.zeros([1, 1], dtype=int, order='F')
 # Parameter to store coordinate and diameter data from step 1
 Particle_details = np.vstack((CenterCoordinates, Diameter))
 # Initialize the step counter for part 2.
 step_2 = 0
 # Temporary loop completion criteria
-loops = 1
+loops = 10
 # Downstream boundary condition x_location. All x_locations downstream of 
 # x_max-DS_Bound will have a fixed surface particle condition for all numerical
 # time steps [L].
@@ -488,86 +491,137 @@ while step_2 < loops:
     Hop_locy = Entrain_locsy
     step_2 = step_2 + 1
     E_radius = E_diameter / 2
+    L_x_Store_temp = np.asarray(L_x).ravel()
+    L_x_Store.append(L_x_Store_temp)
     
+    flat_list = [item for sublist in L_x_Store for item in sublist]
+    for sublist in L_x_Store:
+        for item in sublist:
+            flat_list.append(item)
+            
+    bins = np.arange(0, 20, 0.1) # fixed bin size
+    plt.xlim([min(L_x_Store)-5, max(L_x_Store)+5])
+
+    plt.hist(L_x_Store, bins=bins, alpha=0.5)
+    plt.title('Random Gaussian data (fixed bin size)')
+    plt.xlabel('variable X (bin size = 5)')
+    plt.ylabel('count')
+
+    plt.show()
+        
 ###############################################################################
 ## STEP SIX: PRINT RESULTS TO SCREEN AND WRITE PERTINENT RESULTS TO FILE
-print("--- %s seconds ---" % (time.time() - start_time))
-# STEP SIX: PLOT THE RESULTS
-fig = plt.figure(2)
-ax = fig.add_subplot(1, 1, 1, aspect='equal')
-ax.set_xlim((-1, x_max+1))
-ax.set_ylim((-1, y_max+1))
-resolution = 50  # the number of vertices
-Radius_Array = np.asarray((Diameter / 2), dtype=float)
-Radius_Array = Radius_Array.reshape(-1)
-XCenter = np.reshape(CenterCoordinates[0, :], (1, len(CenterCoordinates[0])))
-XCenter = XCenter.reshape(-1)
-YCenter = np.reshape(CenterCoordinates[1, :], (1, len(CenterCoordinates[0])))
-YCenter = YCenter.reshape(-1)
-plt.rcParams['image.cmap'] = 'gray'
-# This method of plotting circles comes from Stack Overflow questions/32444037
-# Note that the patches won't be added to the axes, instead a collection will.
-patches = []
-for x1, y1, r in zip(XCenter, YCenter, Radius_Array):
-    circle = Circle((x1, y1), r)
-    patches.append(circle)
-colors = 1000*np.random.rand(len(CenterCoordinates[0]))
-p = (PatchCollection(patches, cmap=cm.binary,
-                     alpha=0.9, linewidths=(0, )))
-p.set_array(colors)
-p.set_clim([5, 950])
-ax.add_collection(p)
-plt.hold(True)
-#plt.show()
-# This method of plotting circles comes from Stack Overflow questions/32444037
-# Note that the patches won't be added to the axes, instead a collection will.
-#fig = plt.figure(3)
-ax = fig.add_subplot(1, 1, 1, aspect='equal')
-ax.set_xlim((-1, x_max+1))
-ax.set_ylim((-1, y_max+1))
-resolution = 50  # the number of vertices
-XCenter_entrain = np.asarray(Entrain_locsx).ravel()
-YCenter_entrain = np.asarray(Entrain_locsy).ravel()
-E_radius_entrain = np.asarray(E_radius).ravel()
-Hop_XCenter = np.asarray(Hop_locx).ravel()
-Hop_YCenter = np.asarray(Hop_locy).ravel()
-patches = []
-for x1, y1, r in zip(XCenter_entrain, YCenter_entrain, E_radius_entrain):
-    circle = Circle((x1, y1), r)
-    patches.append(circle)
-colors = 1000*np.random.rand(len(CenterCoordinates[0]))
-p = (PatchCollection(patches, cmap=cm.Reds,
-                     alpha=0.9, linewidths=(0, )))
-p.set_array(colors)
-p.set_clim([5, 950])
-plt.hold(True)
-#ax.add_collection(p)
-#plt.show()
-#fig = plt.figure(4)
-#ax = fig.add_subplot(1, 1, 1, aspect='equal')
-#ax.set_xlim((-1, x_max+1))
-#ax.set_ylim((-1, y_max+1))
-#resolution = 50  # the number of vertices
-patches = []
-for x2, y2, r2 in zip(Hop_XCenter, Hop_YCenter, E_radius_entrain):
-    circle = Circle((x2, y2), r2)
-    patches.append(circle)
-colors = 1000*np.random.rand(len(CenterCoordinates[0]))
-p1 = (PatchCollection(patches, cmap=cm.Blues,
-                     alpha=0.9, linewidths=(0, )))
-p1.set_array(colors)
-p1.set_clim([5, 950])
-ax.add_collection(p)
-plt.hold(True)
-ax.add_collection(p1)
-plt.show()
-# Need to insert some commands to write files to subdirectory.
-# os.makedirs('\\ScriptTest')
-fig.savefig('.\ScriptTest\Entrained_Bed_Test2.pdf', format='pdf', dpi=2400)
-# Save initial results for archiving and plotting.
-#np.save('.\ScriptTest\XCenter_Initial', XCenter)
-#np.save('.\ScriptTest\YCenter_Initial', YCenter)
-#np.save('.\ScriptTest\Radius_Array_Initial', Radius_Array)
-        
+    print("--- %s seconds ---" % (time.time() - start_time))
+    # STEP SIX: PLOT THE RESULTS
+    fig = plt.figure(2)
+    ax = fig.add_subplot(1, 1, 1, aspect='equal')
+    ax.set_xlim((-1, x_max+1))
+    ax.set_ylim((-1, y_max+1))
+    resolution = 50  # the number of vertices
+    Radius_Array = np.asarray((Diameter / 2), dtype=float)
+    Radius_Array = Radius_Array.reshape(-1)
+    XCenter = np.reshape(CenterCoordinates[0, :], (1, len(CenterCoordinates[0])))
+    XCenter = XCenter.reshape(-1)
+    YCenter = np.reshape(CenterCoordinates[1, :], (1, len(CenterCoordinates[0])))
+    YCenter = YCenter.reshape(-1)
+    plt.rcParams['image.cmap'] = 'gray'
+    # This method of plotting circles comes from Stack Overflow questions/32444037
+    # Note that the patches won't be added to the axes, instead a collection will.
+    patches = []
+    for x1, y1, r in zip(XCenter, YCenter, Radius_Array):
+        circle = Circle((x1, y1), r)
+        patches.append(circle)
+    colors = 1000*np.random.rand(len(CenterCoordinates[0]))
+    p = (PatchCollection(patches, cmap=cm.binary,
+                         alpha=0.9, linewidths=(0, )))
+    p.set_array(colors)
+    p.set_clim([5, 950])
+    ax.add_collection(p)
+    plt.hold(True)
+    #plt.show()
+    # This method of plotting circles comes from Stack Overflow questions/32444037
+    # Note that the patches won't be added to the axes, instead a collection will.
+    #fig = plt.figure(3)
+    ax = fig.add_subplot(1, 1, 1, aspect='equal')
+    ax.set_xlim((-1, x_max+1))
+    ax.set_ylim((-1, y_max+1))
+    resolution = 50  # the number of vertices
+    XCenter_entrain = np.asarray(Entrain_locsx).ravel()
+    YCenter_entrain = np.asarray(Entrain_locsy).ravel()
+    E_radius_entrain = np.asarray(E_radius).ravel()
+    Hop_XCenter = np.asarray(Hop_locx).ravel()
+    Hop_YCenter = np.asarray(Hop_locy).ravel()
+    patches = []
+    for x1, y1, r in zip(XCenter_entrain, YCenter_entrain, E_radius_entrain):
+        circle = Circle((x1, y1), r)
+        patches.append(circle)
+    colors = 1000*np.random.rand(len(CenterCoordinates[0]))
+    p = (PatchCollection(patches, cmap=cm.Reds,
+                         alpha=0.9, linewidths=(0, )))
+    p.set_array(colors)
+    p.set_clim([5, 950])
+    plt.hold(True)
+    patches = []
+    for x2, y2, r2 in zip(Hop_XCenter, Hop_YCenter, E_radius_entrain):
+        circle = Circle((x2, y2), r2)
+        patches.append(circle)
+    colors = 1000*np.random.rand(len(CenterCoordinates[0]))
+    p1 = (PatchCollection(patches, cmap=cm.Blues,
+                         alpha=0.9, linewidths=(0, )))
+    p1.set_array(colors)
+    p1.set_clim([5, 950])
+    ax.add_collection(p)
+    plt.hold(True)
+    ax.add_collection(p1)
+    plt.show()
+    fig.savefig('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/Entrained_TotalBed_Step_%d.pdf' % step_2, format='pdf', dpi=2400)
+    ##
+    ##
+    # This method of plotting circles comes from Stack Overflow questions/32444037
+    # Note that the patches won't be added to the axes, instead a collection will.
+    fig = plt.figure(3)
+    ax = fig.add_subplot(1, 1, 1, aspect='equal')
+    ax.set_xlim((-1, x_max+1))
+    ax.set_ylim((-1, y_max+1))
+    resolution = 50  # the number of vertices
+    XCenter_entrain = np.asarray(Entrain_locsx).ravel()
+    YCenter_entrain = np.asarray(Entrain_locsy).ravel()
+    E_radius_entrain = np.asarray(E_radius).ravel()
+    Hop_XCenter = np.asarray(Hop_locx).ravel()
+    Hop_YCenter = np.asarray(Hop_locy).ravel()
+    patches = []
+    for x1, y1, r in zip(XCenter_entrain, YCenter_entrain, E_radius_entrain):
+        circle = Circle((x1, y1), r)
+        patches.append(circle)
+    colors = 1000*np.random.rand(len(CenterCoordinates[0]))
+    p = (PatchCollection(patches, cmap=cm.Reds,
+                         alpha=0.9, linewidths=(0, )))
+    p.set_array(colors)
+    p.set_clim([5, 950])
+    plt.hold(True)
+    patches = []
+    for x2, y2, r2 in zip(Hop_XCenter, Hop_YCenter, E_radius_entrain):
+        circle = Circle((x2, y2), r2)
+        patches.append(circle)
+    colors = 1000*np.random.rand(len(CenterCoordinates[0]))
+    p1 = (PatchCollection(patches, cmap=cm.Blues,
+                         alpha=0.9, linewidths=(0, )))
+    p1.set_array(colors)
+    p1.set_clim([5, 950])
+    ax.add_collection(p)
+    plt.hold(True)
+    ax.add_collection(p1)
+    plt.show()
+    # Need to insert some commands to write files to subdirectory.
+    # os.makedirs('\\ScriptTest')
+    fig.savefig('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/Entrained_Particles_Step_%d.pdf' % step_2, format='pdf', dpi=2400)
+    # Save initial results for archiving and plotting.
+    np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/XCenter_Entrain_Step_%d' % step_2, XCenter_entrain)
+    np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/YCenter_Entrain_Step_%d' % step_2, YCenter_entrain)
+    np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/Radius_Entrain_Step_%d' % step_2, E_radius_entrain)
+    np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/XHop_Entrain_Step_%d' % step_2, Hop_XCenter)
+    np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/YHop_Entrain_Step_%d' % step_2, Hop_YCenter)
+    np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/Travel_Time_Step_%d' % step_2, T_p)
+    np.save('/Volumes/ESD-USB/GitHub/MarkovProcess_Bedload/ScriptTest/Hop_Distance_Step_%d' % step_2, L_x)
 # Circle area.
 # END OF CODE
