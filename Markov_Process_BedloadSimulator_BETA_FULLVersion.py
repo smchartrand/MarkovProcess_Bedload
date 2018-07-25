@@ -221,7 +221,9 @@ while (AreaTotal / Total_VArea) < Pack:
     # Check to see if radius needs revision for steps greater than the first
     if step_1 != 1:
         # CALL FUNCTION
-        radius, newCircle_Found = fu_diamrevise(x_Center, y_Center, radius)    
+        radius, newCircle_Found = fu_diamrevise(x_Center, y_Center, radius)
+        if radius == 0:
+            newCircle_Found = 0
     # Only write data if a circle was placed.
     if newCircle_Found == 1:
         # Write data to variables
@@ -247,14 +249,15 @@ while (AreaTotal / Total_VArea) < Pack:
             CenterCoordinates = np.delete(CenterCoordinates, 0, 1)
             Diameter = np.delete(Diameter, 0, 1)
             CenterElev = np.delete(CenterElev, 0, 1)
-        # Advance counter.
-        step_1 = step_1 + 1
         # Calculate the percent completion of simulation and print to console.
         percentage_complete = (100.0 * (AreaTotal / Total_VArea) / Pack)
         while len(milestones) > 0 and percentage_complete >= milestones[0]:
             print "{}% complete".format(milestones[0])
             # remove that milestone from the list
-            milestones = milestones[1:]       
+            milestones = milestones[1:]    
+        if (AreaTotal / Total_VArea) < Pack:
+           # Advance counter.
+           step_1 = step_1 + 1
     # This operation restarts the script if the execution time is too long.
     # I think there is a bug but I cannot figure out what it is. Filling the
     # rectangular area stalls out at 95 or 99% about 1 out of every 4 runs.
@@ -280,13 +283,17 @@ while (AreaTotal / Total_VArea) < Pack:
         # Milestones used to display calculation progress.
         milestones = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99, 100]
         print("--- RESTARTING LOOP ---")
-                
+              
 # END SECTION
 ###############################################################################
 ###############################################################################
 # STEP SIX: PRINT RESULTS TO SCREEN AND WRITE PERTINENT RESULTS TO FILE
+if np.any(Diameter == 0):
+   print("--- WARNING - Some particles have a zero diameter ---") 
+else:
+   print("--- GOOD NEWS - All particles have a diameter ---") 
 print("--- %s seconds ---" % (time.time() - start_time))
-print("--- %s total particles in domain ---" % (step_1 - 1))
+print("--- %s total particles in domain ---" % (step_1))
 # STEP SIX: PLOT THE RESULTS
 fig = plt.figure(1)
 ax = fig.add_subplot(1, 1, 1, aspect='equal')
@@ -347,11 +354,10 @@ T_pmin = 0
 T_pmax = 1.0
 # Particle hop distance (L).
 L_x = np.zeros([1, 1], dtype=int, order='F')
-L_x_Store = []
-L_x_Store_temp = np.zeros([1, 1], dtype=int, order='F')
+L_x_Store = [0]
 E_events_Store = [0]
 E_particles_Store = [0]
-US_flux = np.zeros([1, 1], dtype=int, order='F')
+US_supply = np.zeros([1, 1], dtype=int, order='F')
 # Parameter to store coordinate and diameter data from step 1
 Particle_details = np.vstack((CenterCoordinates, Diameter, CenterElev))
 np.save('.\ScriptTest\ParticleDetails_Initial', Particle_details)
@@ -371,11 +377,12 @@ DS_Fix = x_max - DS_Bound
 # STEP TWO: DIVIDE THE BED INTO SAMPLING REGIONS AND BUILD SAMPLING ARRAY
 # Number of bed sampling regions within the control volume V_c
 Bed_sampreg = 10
+# Bed sampling boundaries in the x-direction
+BS_boundaries = XCoordinates_Orig + (x_max / Bed_sampreg) * np.arange(0, Bed_sampreg + 1, dtype=int)
+SSamp_len = len(BS_boundaries)
 # Index to hold boundaries between subsampling regions to facilitate random
 # sampling from within each region.
-SubSampl_idx = np.zeros([1, Bed_sampreg], dtype=int, order='F')
-# Bed sampling boundaries in the x-direction
-BS_boundaries = XCoordinates_Orig + (x_max / Bed_sampreg) * np.arange(1, Bed_sampreg + 1, dtype=int)
+SubSampl_idx = np.zeros([1, SSamp_len], dtype=int, order='F')
 # Create variables to hold flux timeseries
 Flux_array_Store = [0]
 Hop_locx_Store = [0]
@@ -404,21 +411,7 @@ def fu_search(item, vec):
 while step_2 <= loops:
 
     
-   # E_events is the entrainment events per unit area of the bed
-   E_events = np.random.poisson(Lambda_1,None)
-   if E_events == 0:
-       E_events = np.random.poisson(Lambda_1,None)
-   # Save the E_events to a list
-   E_events_Store.extend([E_events]) 
-   if step_2 == 1:
-       del E_events_Store [0]
-   # Total number of entrained particles not counting immigrants across V_c
-   E_particles = E_events * Bed_sampreg
-   # Save the E_events to a list
-   E_particles_Store.extend([E_particles])
-   if step_2 == 1:
-       del E_particles_Store [0]
-   # Initialize two variables to store entrainment location information
+   # Initialize variables to store entrainment and hop information
    Entrain_idx = np.zeros([1, 1], dtype=int, order='F')
    Entrain_locsx = np.zeros([1, 1], dtype=int, order='F')
    Entrain_locsy = np.zeros([1, 1], dtype=int, order='F')
@@ -426,39 +419,52 @@ while step_2 <= loops:
    T_p = np.zeros([1, 1], dtype=int, order='F')
    L_x = np.zeros([1, 1], dtype=int, order='F')
    E_diameter = np.zeros([1, 1], dtype=int, order='F')
-   L_x_Store_2 = np.zeros([1, 1], dtype=int, order='F')
     
+   # E_events is the entrainment events per unit area of the bed
+   E_events = np.random.poisson(Lambda_1,None)
+   if E_events == 0:
+       continue
+       E_events = 1
+   # Save the E_events to a list
+   E_events_Store.extend([E_events]) 
+   # Total number of entrained particles not counting immigrants across V_c
+   E_particles = E_events * Bed_sampreg
+   # Save the E_events to a list
+   E_particles_Store.extend([E_particles])      
+       
    if step_2 == 1:
       # Make it easy to figure out where to randomly entrain particles within the CV.
       Particle_details_sort = Particle_details[:, Particle_details[0].argsort()]
    else:
       # Make it easy to figure out where to randomly entrain particles within the CV.
       Particle_details_sort = Particle_details_sort[:, Particle_details_sort[0].argsort()]
-        
+   
+   # Keep track of the length of the particle details array in dimension 0
+   length_idx = len(Particle_details_sort[0])   
    # Loop to boundaries between subsampling regions
-   for n in range(0, Bed_sampreg):
+   for n in range(0, SSamp_len):
        # Find indices within sort coordinates array for subsampling
        SubSampl_idx[0,n] = fu_search(BS_boundaries[n],Particle_details_sort[0,:])
-       # Calculate the travel time as a randomly sampled variable from a uniform
-       # distribution constrained by Fathel et al., 2015.
-       T_ptemp = (np.random.uniform(T_pmin, T_pmax, E_events).reshape(1, E_events))
-       # (np.round((np.random.uniform(T_pmin,T_pmax,E_events)),1).reshape(1, E_events))
-       # https:\\stackoverflow.com\questions\2106503\
-       T_ptemp2 = np.log(1 - T_ptemp) / (-Lambda_1)
-       # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
-       # For now I am multuplying by 10 so units are consistent (). Rounding
-       # the output to map the entrained particles to the 2D grid.
-       L_xtemp = np.round((T_ptemp2 ** 2) * 10, 1)
-       if n > 0:
-           if US_flux > 0:
-              T_ptemp_US = (np.random.uniform(T_pmin, T_pmax, US_flux).reshape(1, US_flux)) 
-              T_ptemp2_US = np.log(1 - T_ptemp_US) / (-Lambda_1)
-              L_xtemp_US = np.round((T_ptemp2_US ** 2) * 10, 1)
        # Specify random entrainment sampling indices
        if n == 0:
-           Rand_ELocs = (np.random.randint(1,SubSampl_idx[0,n],E_events).reshape(1, E_events))
+           if US_supply > 0:
+              US_occurrences = np.max(np.where(Particle_details_sort[0] == 0))
+              US_count = np.count_nonzero(Particle_details_sort[0] == 0)
+              if US_occurrences == 0:
+                 Rand_ELocs = np.zeros([1, 1], dtype=int, order='F')
+              else:
+                 Rand_ELocs = np.expand_dims(np.arange(0, US_count), axis=0)
+              #Rand_ELocs = (np.random.randint(US_occurrences,SubSampl_idx[0,n],E_events).reshape(1, E_events))
+           else:
+              continue
+       elif n == Bed_sampreg:
+           #Rand_ELocs = (np.random.randint(SubSampl_idx[0,n-1]+1,length_idx,E_events).reshape(1, E_events))
+           Rand_ELocs = random.sample(xrange(SubSampl_idx[0,n-1]+1,length_idx), E_events)
+           Rand_ELocs = np.array(Rand_ELocs).reshape(1, E_events)
        else:
-           Rand_ELocs = (np.random.randint(SubSampl_idx[0,n-1] + 0.1,SubSampl_idx[0,n],E_events).reshape(1, E_events))                    
+           #Rand_ELocs = (np.random.randint(SubSampl_idx[0,n-1]+1,SubSampl_idx[0,n],E_events).reshape(1, E_events))
+           Rand_ELocs = random.sample(xrange(SubSampl_idx[0,n-1]+1,SubSampl_idx[0,n]), E_events)
+           Rand_ELocs = np.array(Rand_ELocs).reshape(1, E_events)                    
        # Save the random locations for replacement operation below
        Rand_ELocs_Store = np.hstack((Rand_ELocs_Store, Rand_ELocs))
        # Actual entrainment x-coordinates
@@ -467,17 +473,31 @@ while step_2 <= loops:
        Loc_y = Particle_details_sort[1,Rand_ELocs]
        # Associated entrained particle diameters
        E_diam = Particle_details_sort[2,Rand_ELocs]
-       
+       # Calculate the travel time as a randomly sampled variable from a uniform
+       # distribution constrained by Fathel et al., 2015.
+       if n == 0 and US_supply > 0:
+           if US_occurrences == 0:
+               T_p_init1 = (np.random.uniform(T_pmin, T_pmax, US_count).reshape(1, US_count))
+           else:
+               T_p_init1 = (np.random.uniform(T_pmin, T_pmax, US_count).reshape(1, US_count))
+       else:
+           T_p_init1 = (np.random.uniform(T_pmin, T_pmax, E_events).reshape(1, E_events))
+       # https:\\stackoverflow.com\questions\2106503\
+       T_p_init2 = np.log(1 - T_p_init1) / (-Lambda_1)
+       # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
+       # For now I am multuplying by 10 so units are consistent (). Rounding
+       # the output to map the entrained particles to the 2D grid.
+       L_x_init = np.round((T_p_init2 ** 2) * 10, 1)
        # Write the entrainment location data to three variables
        Entrain_idx = np.hstack((Entrain_idx, Rand_ELocs))
        Entrain_locsx = np.hstack((Entrain_locsx, Loc_x))
        Entrain_locsy = np.hstack((Entrain_locsy, Loc_y))
-       T_p = np.hstack((T_p, T_ptemp))
-       L_x = np.hstack((L_x, L_xtemp))
+       T_p = np.hstack((T_p, T_p_init2))
+       L_x = np.hstack((L_x, L_x_init))
        E_diameter = np.hstack((E_diameter, E_diam))
        # Delete the initialization zero entry
        if n == (Bed_sampreg-1):
-                      
+          #            
           Entrain_idx = np.delete(Entrain_idx, 0, 1)
           Entrain_locsx = np.delete(Entrain_locsx, 0, 1)
           Entrain_locsy = np.delete(Entrain_locsy, 0, 1)
@@ -487,28 +507,30 @@ while step_2 <= loops:
           E_diameter = np.delete(E_diameter, 0, 1)
        
        E_radius = E_diameter / 2
-       L_x_Store_temp = np.asarray(L_x).ravel()
-       L_x_Store.append(L_x_Store_temp)
-       L_x_Store_2 = np.hstack((L_x_Store_2, L_x))
                   
    # This is the destination of partciles after the hop distance is applied.
    # The result returns the destination in the streamwise coordinate only.        
-   Hop_locx = Entrain_locsx + L_x
+   Hop_locx = Entrain_locsx + L_x 
    Hop_locy = Entrain_locsy
+   L_x_Store.extend([L_x])
    Hop_locx_Store.extend([Hop_locx])
-   if (step_2 == loops) & (n == Bed_sampreg-1):
+   if (step_2 == loops) & (n == SSamp_len - 1):
+      del L_x_Store[0]
       del Hop_locx_Store[0]
+      del E_events_Store [0]
+      del E_particles_Store [0]
    
    # Compile the grains which pass the subregions and the downstream end
-   for n in range(0, Bed_sampreg):
+   for n in range(0, SSamp_len):
       Flux_array = np.count_nonzero((Entrain_locsx <= BS_boundaries[n]) & (Hop_locx > BS_boundaries[n]))
       # Flux_array = np.count_nonzero([(Entrain_locsx <= BS_boundaries[n]) & (Hop_locx > BS_boundaries[n])], axis=1)
       Flux_array_Store.extend([Flux_array])
       if (step_2 == loops) & (n == Bed_sampreg-1):
           del Flux_array_Store[0]   
    # Deal with particles that cross the downstream boundary
-   Hop_locx[Hop_locx > x_max] = -0.5
-   US_flux = np.count_nonzero(Hop_locx == 0)             
+   Hop_locx[Hop_locx > x_max] = 0
+   US_supply = np.count_nonzero(Hop_locx == 0)
+              
    # Store the new x-location for the entrained particles
    Particle_details_sort[0,Rand_ELocs_Store] = Hop_locx
    Particle_details_sort[1,Rand_ELocs_Store] = Hop_locy
@@ -641,21 +663,15 @@ while step_2 <= loops:
       def model_func(x, a, k, b):
           return a * np.exp(-k*x) + b
 
-      flat_list = [item for sublist in L_x_Store for item in sublist]
-      for sublist in L_x_Store:
-         for item in sublist:
-            flat_list.append(item)
+#      flat_list = [item for sublist in L_x_Store for item in sublist]
+#      for sublist in L_x_Store:
+#         for item in sublist:
+#            flat_list.append(item)
 
+      my_array = np.concatenate([np.array(i) for i in L_x_Store],axis=1).reshape(-1)
       fig = plt.figure(10)
       bins = np.arange(0, 20, 1) # fixed bin size
-      hist_x = np.arange(0.5, 19.5,1)
-      # curve fit
-      p0 = (1.,1.e-5,1.) # starting search koefs
-      opt, pcov = curve_fit(model_func, hist_x, n, p0)
-      a, k, b = opt
-
-      (n1, bins, patches) = plt.hist(flat_list, bins=bins, density=True, color="#3F5D7D", edgecolor='black')
-      #plt.plot(hist_x,opt,'--r')
+      plt.hist(my_array, bins=bins, density=True, color="#3F5D7D", edgecolor='black')
       plt.title('Histogram of Hop Distance (n = 32,000)')
       plt.xlabel('Hop Distance (cm)')
       plt.ylabel('Count')
@@ -679,20 +695,23 @@ while step_2 <= loops:
       ax.set_xlim((-1, max(bins)+1))
       ax.set_xticks([-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
             
+      hist, bin_edges = np.histogram(Flux_ds_boundary, bins = bins)
+      EParticles_total = np.sum(hist * bin_edges[0:-1])
       plt.hist(Flux_ds_boundary, bins=bins, density=False, color="#3F5D7D", edgecolor='black')
       plt.title('Histogram of Particle Flux at Downstream Boundary')
       plt.xlabel('Flux (# of particles)')
       plt.ylabel('Fraction')
       plt.show()
       fig.savefig('.\ScriptTest\FluxDownstreamBoundary.pdf', format='pdf', dpi=2400)
-   
+      print("--- loop %d out of %d total loops ---" % (step_2, loops))
+      print("--- %s total seconds ---" % (time.time() - start_time))
       print("--- SIMULATION FINISHED ---")
       break
   
    else:
       #Particle_details_sort = np.place(Particle_details_sort[0,:], Rand_ELocs_Store, Hop_locx)
       print("--- loop %d out of %d total loops ---" % (step_2, loops))
-      print("--- %s total particles in domain ---" % (step_1 - 1))
+      print("--- %s total particles in domain ---" % (step_1))
       print("--- %s total particles in domain after loop ---") % (len(Particle_details_sort[0]))
       step_2 = step_2 + 1
 # Crcle area.
