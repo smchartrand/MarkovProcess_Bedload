@@ -1,3 +1,6 @@
-1. entrainment site
-2. hop distance distribution
-3. flux distribution
+Questions and criticisms:
+1. Even though we specify a narrow range of grain sizes, we end up with some pretty small grains
+(< 1 mm) on the bed surface. These relatively small grains are entrained regardless of position
+on the bed surface in relation to larger grains. Are we okay with that? Specifically, we assume
+that relatively large mobility thresholds are overcome under our rarefied simulations.
+2. 
