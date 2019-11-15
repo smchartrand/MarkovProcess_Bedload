@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle
 
+############################################################################### 
 #%% initial parameter for particles and plotting
 Area = np.zeros([1, 1], dtype=int, order='F')
 # Total area of placed circles. Initialize to 0.
@@ -31,6 +32,7 @@ min_diam = 4.0
 Size_Frac = 0.06
 max_diam = 6.0 
 
+############################################################################### 
 #%% Initial Packing of Streambed 
 def bed_complete(pack_idx):
     """ Boolean check for whether 1D bed is fully packed or not""" 
@@ -83,28 +85,41 @@ radius_array = np.asarray((bed_particles[:,0] / 2.0), dtype=float)
 ### End Calls/Script Section
 
 # TODO: encapsulate plotting in function
-fig = plt.figure(1)
-fig.set_size_inches(10.5, 6.5)
-ax = fig.add_subplot(1, 1, 1, aspect='equal')
-ax.set_xlim((-2, x_max + 2))
-ax.set_ylim((0, x_max/4 + 2))
-resolution = 50
 
-x_center = (bed_particles[:,0] + bed_particles[:,1]) - radius_array
-y_center_bed = np.zeros(np.size(x_center))
-plt.rcParams['image.cmap'] = 'gray'
-## This method of plotting circles comes from Stack Overflow questions\32444037
-## Note that the patches won't be added to the axes, instead a collection will.
-patches = []
-for x1, y1, r in zip(x_center, y_center_bed, radius_array):
-    circle = Circle((x1, y1), r)
-    patches.append(circle)
-p = (PatchCollection(patches, color="#BDBDBD", alpha=0.9, linewidths=(0, )))
-ax.add_collection(p)
 
+###############################################################################   
+#%% Bed is built. Place/create n particles in avaliable vertices
+##### NOTE: THIS FUNCTION SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
+def plot_stream(bed_particles, radius_array, chosen_vertex, x_lim, y_lim):
     
-#%% Bed is built. Place n particles in avaliable vertices
-
+    fig = plt.figure(1)
+    fig.set_size_inches(10.5, 6.5)
+    ax = fig.add_subplot(1, 1, 1, aspect='equal')
+    # NOTE: xlim and ylim modified for aspec ratio -- WIP
+    ax.set_xlim((-2, x_lim))
+    ax.set_ylim((0, y_lim))
+    resolution = 50
+    
+    x_center = (bed_particles[:,0] + bed_particles[:,1]) - radius_array
+    y_center_bed = np.zeros(np.size(x_center))
+    plt.rcParams['image.cmap'] = 'gray'
+    ## This method of plotting circles comes from Stack Overflow questions\32444037
+    ## Note that the patches won't be added to the axes, instead a collection will.
+    patches = []
+    for x1, y1, r in zip(x_center, y_center_bed, radius_array):
+        circle = Circle((x1, y1), r)
+        patches.append(circle)
+    p = (PatchCollection(patches, color="#BDBDBD", alpha=0.9, linewidths=(0, )))
+    ax.add_collection(p)
+    ### FOR TESTING: Plots the avaliable vertex lines 
+    for xc in vertex_idx:
+        plt.axvline(x=xc, color='b', linestyle='-')
+    for green in chosen_vertex:
+        plt.axvline(x=green, color='g', linestyle='-')
+    ### 
+    plt.show()
+    return
+    
 def determine_num_particles(pack_frac, num_vertices):
     """ determine the number of particles to introduce into model, based
     on the packing fraction and number of avaliable vertices """
@@ -115,48 +130,63 @@ def determine_num_particles(pack_frac, num_vertices):
     return num_particles
 
 
+def fit_particle(particle_id, chosen_vertex, diam):
+    """ Fit a particle of size diam at location of chosen_vertex. If diam is
+    too large, resize until it will fit. Return the resulting center coord, 
+    diameter and elevation of the fitted particle """
+    # grab information about left and right bed particles
+    left_bed_p = 0
+    right_bed_p = 0
+    
+    # resize particle diam until it 'fits'
+    while ~particls_fits():
+            fu_resize()
+            
+    
+    return p_center, p_diam, p_elev
+
 def place_model_particles(vertex_idx):
     """ Randomly choose vertices from vertex_idx to place n particles. 
-    Returns n-3 array containing the center coordinate, diameter, elevation
+    Returns n-3 array containing the center coordinate, diameter and elevation
     of each individual particle """
     
     num_vertices = np.size(vertex_idx)
     already_selected = [False] * num_vertices
     num_particles = determine_num_particles(Pack, num_vertices)
-     
+    model_particles = np.zeros([max_particles, 3],dtype='int')
+    # FOR TESTING:
+    chosen_vertex = np.zeros(num_particles)
+    
+    
     for particle in range(num_particles):
-        
-        random_diam = random.randint(min_diam, max_diam)
         # select vertex and ensure it has not previously been selected
         random_idx = random.randint(1, np.size(vertex_idx)-1)
         while already_selected[random_idx]:
             random_idx = random.randint(1, np.size(vertex_idx)-1)
-        random_vertex = vertex_idx[random_idx]
+        vertex = vertex_idx[random_idx]
+        # FOR TESTING: 
+        chosen_vertex[particle] = vertex
+        
+        
+#        random_diam = random.randint(min_diam, max_diam)
+#        p_center, p_diam, p_elev = fit_particle(particle, chosen_vertex, \  
+#                                                random_diam)
+#        #  update cell in model_particles
+#        model_particles[particle_id][0] = p_center
+#        model_particles[particle_id][1] = p_diam
+#        model_particles[particle_id][2] = p_elev
+        
+    return chosen_vertex
+ 
        
-        # FOR TESTING: plots chosen vertexes
-        plt.axvline(x=random_vertex, color='g', linestyle='-')
-#        if particle_fits():
-#            # update particle cell
-#        else: 
-#            fu_resize()
-        # CHECK fit, -- resize -- then place
-        # UPDATE particle center, diameter and elevation
-        
-        
 avaliable_vertices = np.zeros(x_max, dtype=bool)
 # boolean array with vertex avalibility based on packed bed 
 avaliable_vertices[bed_particles[1:,1]] = 1
 # x-indexes of avaliable spots
 vertex_idx = np.transpose(np.nonzero(avaliable_vertices))
+chosen_vertex = place_model_particles(vertex_idx)
+plot_stream(bed_particles, radius_array, chosen_vertex, 100, 100/4)
 
-
-### FOR TESTING: Plots the avaliable vertex lines 
-for xc in vertex_idx:
-    plt.axvline(x=xc, color='b', linestyle='-')
-###
-
-place_model_particles(vertex_idx)
-
-plt.show()       
+      
 # show places particles - display with different colour
-
+############################################################################### 
