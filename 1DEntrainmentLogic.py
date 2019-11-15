@@ -48,9 +48,8 @@ def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
     # update build parameters
     pack_idx += random_diam
     particle_id += 1
-    # TODO: related; use remaining_space to understand tight packing near edge
-    remaining_space = x_max - pack_idx
-    return particle_id, pack_idx, remaining_space
+ 
+    return particle_id, pack_idx
 
 
 def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
@@ -58,16 +57,20 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
     and starting idx, where array index = particle id """
     while True:
         random_diam = random.randint(min_diam, max_diam)
-        current_id, pack_idx, rem_space = pack_bed(random_diam, bed_particles, current_id, pack_idx)
-        # TODO: clarify if x_max should be altered or bed repacked when x_max not met exactly
+        current_id, pack_idx = pack_bed(random_diam, bed_particles, current_id, pack_idx)
         if bed_complete(pack_idx):
             break
         else: continue
+    
+    # update x_max once the bed is complete
+    x_max = bed_particles[current_id-1][0] + bed_particles[current_id-1][1]
     # strip zero element particles tuples
     valid = ((bed_particles==0).all(axis=(1)))
     bed_particles = bed_particles[~valid]
+
     return bed_particles
  
+    
 # TODO: Make this part not look gross?
 ### Calls/Script Section
 pack_idx = 0
@@ -139,9 +142,10 @@ def place_model_particles(vertex_idx):
         # CHECK fit, -- resize -- then place
         # UPDATE particle center, diameter and elevation
         
-# boolean array with vertex avalibility based on packed bed 
+        
 avaliable_vertices = np.zeros(x_max, dtype=bool)
-avaliable_vertices[bed_particles[:,1]] = 1 #TODO: exclude start idx for first particle
+# boolean array with vertex avalibility based on packed bed 
+avaliable_vertices[bed_particles[1:,1]] = 1
 # x-indexes of avaliable spots
 vertex_idx = np.transpose(np.nonzero(avaliable_vertices))
 
