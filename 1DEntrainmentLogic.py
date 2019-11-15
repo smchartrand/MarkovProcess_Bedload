@@ -72,8 +72,6 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
 
     return bed_particles
  
-    
-# TODO: Make this part not look gross?
 ### Calls/Script Section
 pack_idx = 0
 max_particles = int(math.ceil(x_max/min_diam))
@@ -84,13 +82,13 @@ bed_particles = build_streambed(bed_particles, min_diam, max_diam, current_id, p
 radius_array = np.asarray((bed_particles[:,0] / 2.0), dtype=float)
 ### End Calls/Script Section
 
-# TODO: encapsulate plotting in function
-
-
 ###############################################################################   
 #%% Bed is built. Place/create n particles in avaliable vertices
-##### NOTE: THIS FUNCTION SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
-def plot_stream(bed_particles, radius_array, chosen_vertex, x_lim, y_lim):
+##### NOTE: plot_stream SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
+def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_lim, y_lim):
+    """ Plot the complete stream from 0,0 to x_lim and y_lim. Bed particles 
+    are plotted as light grey and model particles are dark blue. Plot allows
+    for closer look at the current state of a subregion of the stream """
     
     fig = plt.figure(1)
     fig.set_size_inches(10.5, 6.5)
@@ -111,6 +109,15 @@ def plot_stream(bed_particles, radius_array, chosen_vertex, x_lim, y_lim):
         patches.append(circle)
     p = (PatchCollection(patches, color="#BDBDBD", alpha=0.9, linewidths=(0, )))
     ax.add_collection(p)
+    
+    x_center_m = model_particles[:,0]
+    y_center_m = model_particles[:,2]
+    patches1 = []
+    for x2, y2, r in zip(x_center_m, y_center_m, model_particles[:,1]/2):
+        circle = Circle((x2, y2), r)
+        patches1.append(circle)
+    p_m = (PatchCollection(patches1, facecolors='none', edgecolors='r'))
+    ax.add_collection(p_m)
     ### FOR TESTING: Plots the avaliable vertex lines 
     for xc in vertex_idx:
         plt.axvline(x=xc, color='b', linestyle='-')
@@ -120,6 +127,7 @@ def plot_stream(bed_particles, radius_array, chosen_vertex, x_lim, y_lim):
     plt.show()
     return
     
+
 def determine_num_particles(pack_frac, num_vertices):
     """ determine the number of particles to introduce into model, based
     on the packing fraction and number of avaliable vertices """
@@ -135,13 +143,15 @@ def fit_particle(particle_id, chosen_vertex, diam):
     too large, resize until it will fit. Return the resulting center coord, 
     diameter and elevation of the fitted particle """
     # grab information about left and right bed particles
-    left_bed_p = 0
-    right_bed_p = 0
-    
-    # resize particle diam until it 'fits'
-    while ~particls_fits():
-            fu_resize()
-            
+#    left_bed_p = 0
+#    right_bed_p = 0
+#    
+#    # resize particle diam until it 'fits'
+#    while ~particls_fits():
+#            fu_resize()
+    p_center = chosen_vertex
+    p_diam = diam
+    p_elev = 0
     
     return p_center, p_diam, p_elev
 
@@ -163,20 +173,21 @@ def place_model_particles(vertex_idx):
         random_idx = random.randint(1, np.size(vertex_idx)-1)
         while already_selected[random_idx]:
             random_idx = random.randint(1, np.size(vertex_idx)-1)
+        already_selected[random_idx] = True
         vertex = vertex_idx[random_idx]
+        
         # FOR TESTING: 
         chosen_vertex[particle] = vertex
         
         
-#        random_diam = random.randint(min_diam, max_diam)
-#        p_center, p_diam, p_elev = fit_particle(particle, chosen_vertex, \  
-#                                                random_diam)
+        random_diam = random.randint(min_diam, max_diam)
+        p_center, p_diam, p_elev = fit_particle(particle, vertex, random_diam)
 #        #  update cell in model_particles
-#        model_particles[particle_id][0] = p_center
-#        model_particles[particle_id][1] = p_diam
-#        model_particles[particle_id][2] = p_elev
+        model_particles[particle][0] = p_center
+        model_particles[particle][1] = p_diam
+        model_particles[particle][2] = p_elev
         
-    return chosen_vertex
+    return model_particles, chosen_vertex
  
        
 avaliable_vertices = np.zeros(x_max, dtype=bool)
@@ -184,9 +195,7 @@ avaliable_vertices = np.zeros(x_max, dtype=bool)
 avaliable_vertices[bed_particles[1:,1]] = 1
 # x-indexes of avaliable spots
 vertex_idx = np.transpose(np.nonzero(avaliable_vertices))
-chosen_vertex = place_model_particles(vertex_idx)
-plot_stream(bed_particles, radius_array, chosen_vertex, 100, 100/4)
+model_particles, chosen_vertex = place_model_particles(vertex_idx)
+plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)
 
-      
-# show places particles - display with different colour
 ############################################################################### 
