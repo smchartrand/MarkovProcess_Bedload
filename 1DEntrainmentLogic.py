@@ -45,7 +45,7 @@ def bed_complete(pack_idx):
 def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
     """ Add a new particle to the particle set. Ensure parameters are
     maintained and packing requirements are met """
-    # TODO: fix being over plot by 5 max -- can we make a new min? 
+    # TODO: update bed_particles to match structure of model_particles
     bed_particles[particle_id] = [random_diam, pack_idx]
     # update build parameters
     pack_idx += random_diam
@@ -87,8 +87,8 @@ radius_array = np.asarray((bed_particles[:,0] / 2.0), dtype=float)
 ##### NOTE: plot_stream SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
 def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_lim, y_lim):
     """ Plot the complete stream from 0,0 to x_lim and y_lim. Bed particles 
-    are plotted as light grey and model particles are dark blue. Plot allows
-    for closer look at the current state of a subregion of the stream """
+    are plotted as light grey and model particles are dark blue. Allows
+    for closer look at state of a subregion of the stream during simulation """
     
     fig = plt.figure(1)
     fig.set_size_inches(10.5, 6.5)
@@ -118,7 +118,7 @@ def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_l
         patches1.append(circle)
     p_m = (PatchCollection(patches1, facecolors='none', edgecolors='r'))
     ax.add_collection(p_m)
-    ### FOR TESTING: Plots the avaliable vertex lines 
+    ### FOR TESTING: Plots the avaliable and chosen vertex lines 
     for xc in vertex_idx:
         plt.axvline(x=xc, color='b', linestyle='-')
     for green in chosen_vertex:
@@ -129,7 +129,7 @@ def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_l
     
 
 def determine_num_particles(pack_frac, num_vertices):
-    """ determine the number of particles to introduce into model, based
+    """ Determine the number of particles to introduce into model, based
     on the packing fraction and number of avaliable vertices """
     
     num_particles = num_vertices * pack_frac
@@ -151,7 +151,7 @@ def fit_particle(particle_id, chosen_vertex, diam):
 #            fu_resize()
     p_center = chosen_vertex
     p_diam = diam
-    p_elev = 0
+    p_elev = 3
     
     return p_center, p_diam, p_elev
 
@@ -179,22 +179,21 @@ def place_model_particles(vertex_idx):
         # FOR TESTING: 
         chosen_vertex[particle] = vertex
         
-        
         random_diam = random.randint(min_diam, max_diam)
         p_center, p_diam, p_elev = fit_particle(particle, vertex, random_diam)
-#        #  update cell in model_particles
+        #  update cell in model_particles
         model_particles[particle][0] = p_center
         model_particles[particle][1] = p_diam
         model_particles[particle][2] = p_elev
         
     return model_particles, chosen_vertex
  
-       
+
 avaliable_vertices = np.zeros(x_max, dtype=bool)
-# boolean array with vertex avalibility based on packed bed 
 avaliable_vertices[bed_particles[1:,1]] = 1
-# x-indexes of avaliable spots
+# x-indexes of avaliable vertices to place model particles at
 vertex_idx = np.transpose(np.nonzero(avaliable_vertices))
+
 model_particles, chosen_vertex = place_model_particles(vertex_idx)
 plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)
 
