@@ -7,3 +7,14 @@ that relatively large mobility thresholds are overcome under our rarefied simula
 ADDRESSED: We have narrowed the grain size distribution for the range ~ 3-6 mm.
 August 12, 2018
 2. If we narrow the grain size distribution too much, e.g. 4-6 mm, the current method of building the random bed gets hung up from 90-100% completion looking for available positions on the bed. We may need to change how grains are randomly placed, moving to more of a brute force method where x,y coordinates are incrementally adjusted from the initial random position. The present model build kicks things back to the random coordinate generator.
+--------------------------------------------------------------------------------------------------------------------------
+NOTES FOR SARAH AND SHAWN
+November 22, 2019
+
+Topic: Grain placement at/near avaialble vertex [i.e. open vertex]
+1. At available vertex, query whether the two bounding fixed grain tops are at the same elevation.
+Yes: do nothing, grain can be placed in the vertex position as long as there is enough spotlight space given other bounding grains.
+No: then we use our 2D sphere placement algorithm to guide the way:
+a) Calculate difference of the radius for grain 1 or grain 2 [whichever is higher] and the placed grain radius.
+b) The difference represents the cosine length of a right triagle placed at the bottom of placed grain.
+c) project
