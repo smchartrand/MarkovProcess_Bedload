@@ -1,11 +1,17 @@
+from __future__ import division
 import math
 import random
 import time
 import numpy as np
 
+
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle
+
+# For Testing: REMOVE BEFORE SUBMISSION
+def pause():
+    programPause = raw_input("Press the <ENTER> key to continue...")
 
 ############################################################################### 
 #%% initial parameter for particles and plotting
@@ -45,8 +51,9 @@ def bed_complete(pack_idx):
 def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
     """ Add a new particle to the particle set. Ensure parameters are
     maintained and packing requirements are met """
-    # TODO: update bed_particles to match structure of model_particles
-    bed_particles[particle_id] = [random_diam, pack_idx]
+    center = pack_idx + (random_diam/2)
+    elevation = (random_diam/2) # bed grains always have elevation of height r
+    bed_particles[particle_id] = [random_diam, pack_idx, center, elevation]
     # update build parameters
     pack_idx += random_diam
     particle_id += 1
@@ -57,6 +64,7 @@ def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
 def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
     """ Build streambed until packed. Return n-2 array of particle diameter 
     and starting idx, where array index = particle id """
+    global x_max
     while True:
         random_diam = random.randint(min_diam, max_diam)
         current_id, pack_idx = pack_bed(random_diam, bed_particles, current_id, pack_idx)
@@ -64,7 +72,8 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
             break
         else: continue
     
-    # update x_max once the bed is complete
+    # bed can be packed < 8mm over the default x_max of 500 depending on the 
+    # packing pattern occuring -- therefore update x_max once bed is complete
     x_max = bed_particles[current_id-1][0] + bed_particles[current_id-1][1]
     # strip zero element particles tuples
     valid = ((bed_particles==0).all(axis=(1)))
@@ -75,7 +84,7 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
 ### Calls/Script Section
 pack_idx = 0
 max_particles = int(math.ceil(x_max/min_diam))
-bed_particles = np.zeros([max_particles, 2],dtype='int')
+bed_particles = np.zeros([max_particles, 4],dtype='int')
 current_id = 0
 
 bed_particles = build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx)   
@@ -85,6 +94,8 @@ radius_array = np.asarray((bed_particles[:,0] / 2.0), dtype=float)
 ###############################################################################   
 #%% Bed is built. Place/create n particles in avaliable vertices
 ##### NOTE: plot_stream SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
+
+
 def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_lim, y_lim):
     """ Plot the complete stream from 0,0 to x_lim and y_lim. Bed particles 
     are plotted as light grey and model particles are dark blue. Allows
@@ -138,24 +149,80 @@ def determine_num_particles(pack_frac, num_vertices):
     return num_particles
 
 
-def fit_particle(particle_id, chosen_vertex, diam):
-    """ Fit a particle of size diam at location of chosen_vertex. If diam is
-    too large, resize until it will fit. Return the resulting center coord, 
-    diameter and elevation of the fitted particle """
-    # grab information about left and right bed particles
-#    left_bed_p = 0
-#    right_bed_p = 0
-#    
-#    # resize particle diam until it 'fits'
-#    while ~particls_fits():
-#            fu_resize()
-    p_center = chosen_vertex
-    p_diam = diam
-    p_elev = 3
-    
+def set_particle(g1, g2, particle_id, chosen_vertex, p_diam, height_flag):
+    """ put function definition here """
+    r1 = g1[0] / 2
+    r2 = g2[0] / 2
+    rp = p_diam / 2 
+#    print(r1, r2, rp)
+#    pause()
+    if height_flag == False:
+        # ------------ Initial Contact Points -------------------
+        
+        ABC_1 = np.arcsin( np.divide(r1,(r1 + rp)) )
+#        e_elevation = g1[3] + (r1**2 / (r1 + rp)) # (4)
+        e_x = g1[2] + r1*(np.cos(ABC_1)) # (5)
+        
+        # ------------ Final Contact Points ----------------------        
+        ABC_2 = np.arctan( r2 / (r1 + r2) )
+        Ag = r2 / (np.sin(ABC_2) * np.cos(ABC_2)) # (7)
+#        c_elevation = g2[3] + ( (r2 + np.tan(ABC_2)) / (np.sin(ABC_2) * np.cos(ABC_2)) ) # (8)
+        tanCAd = ((rp * np.sin(ABC_2) * (np.cos(ABC_2) * np.cos(ABC_2))) / r2 )
+        AC = r2 / np.tan(ABC_2)
+        CAd = np.arctan(tanCAd)
+                
+        Afe = CAd + ABC_2
+#        e_elevation_final = g1[3] + r1*np.sin(Afe)
+        
+        # ------------ Particle Final Coordinates ----------------
+        Ad = rp + r1
+        d_x = g1[2] + Ad*np.cos(Afe)
+        d_elevation = g1[3] + Ad*np.sin(Afe)
+        
+#        print(ABC_1, ABC_2, CAd, AC, Afe)     
+#        pause()
+    else: # unique bahaviour if g1 and g2 are the same height -- not yet implemented
+        d_x = chosen_vertex
+        p_diam = p_diam
+        d_elevation = 20
+        
+    p_center = d_x
+    p_diam = p_diam
+    p_elev = d_elevation
+
+#    print(p_center, p_diam, p_elev)
+#    pause()
+         
     return p_center, p_diam, p_elev
 
-def place_model_particles(vertex_idx):
+    
+
+def find_neighbours_of(idx):
+    """ For a given vertex, identify the two neighbour grains (see 2.3) grain1 
+        (g1) and grain2 (g2). g1 will always be the neighbour grain with the 
+        higher elevation, and g2 will be the lower. Function will also return 
+        flag indicating whether neighbours are of equal height """
+     
+    grain_x = bed_particles[idx]
+    grain_y = bed_particles[idx+1]
+    
+    if grain_x[3] == grain_y[3]:
+        equal_height = True
+        g1 = grain_x
+        g2 = grain_y
+    else:
+        equal_height = False
+        if grain_x[3] > grain_y[3]:
+             g1 = grain_x
+             g2 = grain_y
+        else:
+            g2 = grain_y
+            g1 = grain_x
+            
+    return g1, g2, equal_height
+
+
+def place_model_particles(vertex_idx, bed_particles):
     """ Randomly choose vertices from vertex_idx to place n particles. 
     Returns n-3 array containing the center coordinate, diameter and elevation
     of each individual particle """
@@ -163,38 +230,46 @@ def place_model_particles(vertex_idx):
     num_vertices = np.size(vertex_idx)
     already_selected = [False] * num_vertices
     num_particles = determine_num_particles(Pack, num_vertices)
-    model_particles = np.zeros([max_particles, 3],dtype='int')
+    model_particles = np.zeros([max_particles, 4],dtype='int')
     # FOR TESTING:
     chosen_vertex = np.zeros(num_particles)
     
     
     for particle in range(num_particles):
+        
+        random_diam = random.randint(min_diam, max_diam)
         # select vertex and ensure it has not previously been selected
-        random_idx = random.randint(1, np.size(vertex_idx)-1)
+        random_idx = random.randint(0, np.size(vertex_idx)-1)
         while already_selected[random_idx]:
-            random_idx = random.randint(1, np.size(vertex_idx)-1)
+            random_idx = random.randint(0, np.size(vertex_idx)-1)
         already_selected[random_idx] = True
         vertex = vertex_idx[random_idx]
         
         # FOR TESTING: 
         chosen_vertex[particle] = vertex
         
-        random_diam = random.randint(min_diam, max_diam)
-        p_center, p_diam, p_elev = fit_particle(particle, vertex, random_diam)
+        g1, g2, placement_flag = find_neighbours_of(random_idx)
+        p_center, p_diam, p_elev = set_particle(g1, g2, particle, vertex, random_diam, placement_flag)
         #  update cell in model_particles
         model_particles[particle][0] = p_center
         model_particles[particle][1] = p_diam
         model_particles[particle][2] = p_elev
+        model_particles[particle][3] = particle # id number for each particle
+        
+#        plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)        
+#        pause()
         
     return model_particles, chosen_vertex
  
-
+### Calls/Script Section
 avaliable_vertices = np.zeros(x_max, dtype=bool)
 avaliable_vertices[bed_particles[1:,1]] = 1
 # x-indexes of avaliable vertices to place model particles at
 vertex_idx = np.transpose(np.nonzero(avaliable_vertices))
 
-model_particles, chosen_vertex = place_model_particles(vertex_idx)
+
+model_particles, chosen_vertex = place_model_particles(vertex_idx, bed_particles)
 plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)
+### End Calls/Script Section
 
 ############################################################################### 
