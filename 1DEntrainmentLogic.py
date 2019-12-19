@@ -3,7 +3,7 @@ import math
 import random
 import time
 import numpy as np
-
+import sympy as sy
 
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
@@ -52,7 +52,7 @@ def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
     """ Add a new particle to the particle set. Ensure parameters are
     maintained and packing requirements are met """
     center = pack_idx + (random_diam/2)
-    elevation = (random_diam/2) # bed grains always have elevation of height r
+    elevation = 0
     bed_particles[particle_id] = [random_diam, pack_idx, center, elevation]
     # update build parameters
     pack_idx += random_diam
@@ -145,81 +145,45 @@ def determine_num_particles(pack_frac, num_vertices):
     
     num_particles = num_vertices * pack_frac
     num_particles = int(math.ceil(num_particles))
-#    print(num_vertices, num_particles)
+
     return num_particles
 
 
-def set_particle(g1, g2, particle_id, chosen_vertex, p_diam, height_flag):
+def place_particle(g1, g2, p_diam):
     """ put function definition here """
+    
+    x1 = g1[2]
+    x2 = g2[2]
+    # TO UPDATE: y1 and y2 will not always be 0
+    y1 = 0
+    y2 = 0
     r1 = g1[0] / 2
     r2 = g2[0] / 2
     rp = p_diam / 2 
-#    print(r1, r2, rp)
-#    pause()
-    if height_flag == False:
-        # ------------ Initial Contact Points -------------------
-        
-        ABC_1 = np.arcsin( np.divide(r1,(r1 + rp)) )
-#        e_elevation = g1[3] + (r1**2 / (r1 + rp)) # (4)
-        e_x = g1[2] + r1*(np.cos(ABC_1)) # (5)
-        
-        # ------------ Final Contact Points ----------------------        
-        ABC_2 = np.arctan( r2 / (r1 + r2) )
-        Ag = r2 / (np.sin(ABC_2) * np.cos(ABC_2)) # (7)
-#        c_elevation = g2[3] + ( (r2 + np.tan(ABC_2)) / (np.sin(ABC_2) * np.cos(ABC_2)) ) # (8)
-        tanCAd = ((rp * np.sin(ABC_2) * (np.cos(ABC_2) * np.cos(ABC_2))) / r2 )
-        AC = r2 / np.tan(ABC_2)
-        CAd = np.arctan(tanCAd)
-                
-        Afe = CAd + ABC_2
-#        e_elevation_final = g1[3] + r1*np.sin(Afe)
-        
-        # ------------ Particle Final Coordinates ----------------
-        Ad = rp + r1
-        d_x = g1[2] + Ad*np.cos(Afe)
-        d_elevation = g1[3] + Ad*np.sin(Afe)
-        
-#        print(ABC_1, ABC_2, CAd, AC, Afe)     
-#        pause()
-    else: # unique bahaviour if g1 and g2 are the same height -- not yet implemented
-        d_x = chosen_vertex
-        p_diam = p_diam
-        d_elevation = 20
-        
-    p_center = d_x
-    p_diam = p_diam
-    p_elev = d_elevation
-
-#    print(p_center, p_diam, p_elev)
-#    pause()
-         
-    return p_center, p_diam, p_elev
+    
+    x3, y3 = sy.symbols('x3 y3')
+    
+    eq1 = sy.Eq(sy.sqrt((x1-x3)**2 + (y1-y3)**2)-r1-rp)
+    eq2 = sy.Eq(sy.sqrt((x2-x3)**2 + (y2-y3)**2)-r2-rp)
+    
+    sol_dict = sy.solve((eq1,eq2), (x3, y3))
+    p_x = (sol_dict[0][0])
+    p_y = (sol_dict[1][1])
+ 
+    return p_x, p_diam, p_y
 
     
 
 def find_neighbours_of(idx):
-    """ For a given vertex, identify the two neighbour grains (see 2.3) grain1 
-        (g1) and grain2 (g2). g1 will always be the neighbour grain with the 
-        higher elevation, and g2 will be the lower. Function will also return 
-        flag indicating whether neighbours are of equal height """
+    """ For a given vertex, return the two neighbouring grains """
      
     grain_x = bed_particles[idx]
     grain_y = bed_particles[idx+1]
     
-    if grain_x[3] == grain_y[3]:
-        equal_height = True
-        g1 = grain_x
-        g2 = grain_y
-    else:
-        equal_height = False
-        if grain_x[3] > grain_y[3]:
-             g1 = grain_x
-             g2 = grain_y
-        else:
-            g2 = grain_y
-            g1 = grain_x
+    g1 = grain_x
+    g2 = grain_y
             
-    return g1, g2, equal_height
+    return g1, g2
 
 
 def place_model_particles(vertex_idx, bed_particles):
@@ -248,8 +212,8 @@ def place_model_particles(vertex_idx, bed_particles):
         # FOR TESTING: 
         chosen_vertex[particle] = vertex
         
-        g1, g2, placement_flag = find_neighbours_of(random_idx)
-        p_center, p_diam, p_elev = set_particle(g1, g2, particle, vertex, random_diam, placement_flag)
+        g1, g2 = find_neighbours_of(random_idx)
+        p_center, p_diam, p_elev = place_particle(g1, g2, random_diam)
         #  update cell in model_particles
         model_particles[particle][0] = p_center
         model_particles[particle][1] = p_diam
