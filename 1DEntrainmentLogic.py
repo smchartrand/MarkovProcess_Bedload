@@ -51,9 +51,12 @@ def bed_complete(pack_idx):
 def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
     """ Add a new particle to the particle set. Ensure parameters are
     maintained and packing requirements are met """
+    
     center = pack_idx + (random_diam/2)
+
     elevation = 0
     bed_particles[particle_id] = [random_diam, pack_idx, center, elevation]
+  
     # update build parameters
     pack_idx += random_diam
     particle_id += 1
@@ -74,7 +77,7 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
     
     # bed can be packed < 8mm over the default x_max of 500 depending on the 
     # packing pattern occuring -- therefore update x_max once bed is complete
-    x_max = bed_particles[current_id-1][0] + bed_particles[current_id-1][1]
+    x_max = int(math.ceil(bed_particles[current_id-1][0] + bed_particles[current_id-1][1]))
     # strip zero element particles tuples
     valid = ((bed_particles==0).all(axis=(1)))
     bed_particles = bed_particles[~valid]
@@ -84,7 +87,7 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
 ### Calls/Script Section
 pack_idx = 0
 max_particles = int(math.ceil(x_max/min_diam))
-bed_particles = np.zeros([max_particles, 4],dtype='int')
+bed_particles = np.zeros([max_particles, 4],dtype='float')
 current_id = 0
 
 bed_particles = build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx)   
@@ -167,7 +170,8 @@ def place_particle(g1, g2, p_diam):
     eq2 = sy.Eq(sy.sqrt((x2-x3)**2 + (y2-y3)**2)-r2-rp)
     
     sol_dict = sy.solve((eq1,eq2), (x3, y3))
-    p_x = (sol_dict[0][0])
+        
+    p_x = (sol_dict[1][0])
     p_y = (sol_dict[1][1])
  
     return p_x, p_diam, p_y
@@ -175,8 +179,8 @@ def place_particle(g1, g2, p_diam):
     
 
 def find_neighbours_of(idx):
-    """ For a given vertex, return the two neighbouring grains """
-     
+    """ For a given vertex, return the two neighbouring grains """ 
+    
     grain_x = bed_particles[idx]
     grain_y = bed_particles[idx+1]
     
@@ -191,10 +195,13 @@ def place_model_particles(vertex_idx, bed_particles):
     Returns n-3 array containing the center coordinate, diameter and elevation
     of each individual particle """
     
+    # TODO: will need to retrieve updated vertex_idx set each iteration to take 
+    # into account the newly placed particels as possible contact points
     num_vertices = np.size(vertex_idx)
     already_selected = [False] * num_vertices
     num_particles = determine_num_particles(Pack, num_vertices)
-    model_particles = np.zeros([max_particles, 4],dtype='int')
+    model_particles = np.zeros([max_particles, 4],dtype='float')
+    
     # FOR TESTING:
     chosen_vertex = np.zeros(num_particles)
     
@@ -220,14 +227,23 @@ def place_model_particles(vertex_idx, bed_particles):
         model_particles[particle][2] = p_elev
         model_particles[particle][3] = particle # id number for each particle
         
+        
+#       
+#        print("Vertex Index: %d \n" \
+#              "Neighbours (radius, (x,y)):\n"
+#              "Left Neighbour: (%.2f, (%.2f, %.2f))" \
+#              "\nRight Neighbour: (%.2f, (%.2f, %.2f))"\
+#              % (vertex[0], g1[0]/2, g1[2], g1[3], g2[0]/2, g2[2], g2[3]))
 #        plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)        
 #        pause()
         
     return model_particles, chosen_vertex
  
 ### Calls/Script Section
+
 avaliable_vertices = np.zeros(x_max, dtype=bool)
-avaliable_vertices[bed_particles[1:,1]] = 1
+
+avaliable_vertices[bed_particles[1:,1].astype(int)] = 1
 # x-indexes of avaliable vertices to place model particles at
 vertex_idx = np.transpose(np.nonzero(avaliable_vertices))
 
