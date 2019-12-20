@@ -85,6 +85,7 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
 
     return bed_particles
  
+    
 ### Calls/Script Section
 pack_idx = 0
 max_particles = int(math.ceil(x_max/min_diam))
@@ -180,7 +181,7 @@ def place_particle(g1, g2, p_diam):
 
 def find_neighbours_of(idx):
     """ For a given vertex, return the two neighbouring grains """ 
-    # TODO: Need to update function to consider model particles as well as 
+    # TODO: Need to update function to consider model particles _as well as_ 
     # bed particles as possible contact neighbours when being entrained
     grain_x = bed_particles[idx]
     grain_y = bed_particles[idx+1]
@@ -256,17 +257,21 @@ plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 10
 ############################################################################### 
 #%% Model particles have been placed on the bed; stream build is complete.
 # Divide stream into sampling regions and build sampling array to store data
-Bed_sampreg = 25
-# Data storage arrays
-Nu_out_Store = np.zeros([Bed_sampreg, Loops], dtype=int, order='F')#[0]
-# Bed sampling boundaries in the x-direction
-BS_boundaries = (XCoordinates_Orig + (x_max / Bed_sampreg) *
-                 np.arange(0, Bed_sampreg + 1, dtype=int))
-SSamp_len = len(BS_boundaries)
-# Index to hold boundaries between subsampling regions to facilitate random
-# sampling from within each region.
-SubSampl_idx = np.zeros([1, SSamp_len], dtype=int, order='F')
-xB_idx = np.zeros([1, 2], dtype=int, order='F')
-yB_idx = np.zeros([1, 2], dtype=int, order='F')
+bed_sampreg = 25
+# ------------------ below is WIP, pulled directly from Quasi2D:
+## Data storage arrays
+#Nu_out_Store = np.zeros([Bed_sampreg, Loops], dtype=int, order='F')#[0]
+## Bed sampling boundaries in the x-direction
+#BS_boundaries = (XCoordinates_Orig + (x_max / Bed_sampreg) *
+#                 np.arange(0, Bed_sampreg + 1, dtype=int))
+#SSamp_len = len(BS_boundaries)
+## Index to hold boundaries between subsampling regions to facilitate random
+## sampling from within each region.
+#SubSampl_idx = np.zeros([1, SSamp_len], dtype=int, order='F')
+#xB_idx = np.zeros([1, 2], dtype=int, order='F')
+#yB_idx = np.zeros([1, 2], dtype=int, order='F')
+
+###############################################################################
+#
 
 
