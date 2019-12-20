@@ -65,18 +65,19 @@ def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
 
 
 def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
-    """ Build streambed until packed. Return n-2 array of particle diameter 
-    and starting idx, where array index = particle id """
+    """ Build streambed until packed. Return n-4 array of particle diameter 
+    starting idx, x coord and y coord. Array index = particle id """
     global x_max
     while True:
-        random_diam = random.randint(min_diam, max_diam)
+#        random_diam = random.randint(min_diam, max_diam)
+        random_diam = 5.0
         current_id, pack_idx = pack_bed(random_diam, bed_particles, current_id, pack_idx)
         if bed_complete(pack_idx):
             break
         else: continue
     
-    # bed can be packed < 8mm over the default x_max of 500 depending on the 
-    # packing pattern occuring -- therefore update x_max once bed is complete
+    # bed can be packed +- 8mm from the default x_max of 500 depending on the 
+    # packing pattern -- therefore update x_max once bed is complete
     x_max = int(math.ceil(bed_particles[current_id-1][0] + bed_particles[current_id-1][1]))
     # strip zero element particles tuples
     valid = ((bed_particles==0).all(axis=(1)))
@@ -143,7 +144,7 @@ def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_l
     
 
 def determine_num_particles(pack_frac, num_vertices):
-    """ Determine the number of particles to introduce into model, based
+    """ Return the number of particles to introduce into model. Choice is based
     on the packing fraction and number of avaliable vertices """
     
     num_particles = num_vertices * pack_frac
@@ -157,9 +158,8 @@ def place_particle(g1, g2, p_diam):
     
     x1 = g1[2]
     x2 = g2[2]
-    # TO UPDATE: y1 and y2 will not always be 0
-    y1 = 0
-    y2 = 0
+    y1 = g1[3]
+    y2 = g2[3]
     r1 = g1[0] / 2
     r2 = g2[0] / 2
     rp = p_diam / 2 
@@ -180,7 +180,8 @@ def place_particle(g1, g2, p_diam):
 
 def find_neighbours_of(idx):
     """ For a given vertex, return the two neighbouring grains """ 
-    
+    # TODO: Need to update function to consider model particles as well as 
+    # bed particles as possible contact neighbours when being entrained
     grain_x = bed_particles[idx]
     grain_y = bed_particles[idx+1]
     
@@ -195,20 +196,20 @@ def place_model_particles(vertex_idx, bed_particles):
     Returns n-3 array containing the center coordinate, diameter and elevation
     of each individual particle """
     
-    # TODO: will need to retrieve updated vertex_idx set each iteration to take 
-    # into account the newly placed particels as possible contact points
     num_vertices = np.size(vertex_idx)
     already_selected = [False] * num_vertices
     num_particles = determine_num_particles(Pack, num_vertices)
-    model_particles = np.zeros([max_particles, 4],dtype='float')
+    model_particles = np.zeros([max_particles, 4], dtype='float')
     
-    # FOR TESTING:
+    #### FOR TESTING:
     chosen_vertex = np.zeros(num_particles)
-    
+    ####
     
     for particle in range(num_particles):
         
-        random_diam = random.randint(min_diam, max_diam)
+#        random_diam = random.randint(min_diam, max_diam)
+        random_diam = 5.0
+        
         # select vertex and ensure it has not previously been selected
         random_idx = random.randint(0, np.size(vertex_idx)-1)
         while already_selected[random_idx]:
@@ -216,19 +217,19 @@ def place_model_particles(vertex_idx, bed_particles):
         already_selected[random_idx] = True
         vertex = vertex_idx[random_idx]
         
-        # FOR TESTING: 
+        #### FOR TESTING: 
         chosen_vertex[particle] = vertex
+        ####
         
         g1, g2 = find_neighbours_of(random_idx)
-        p_center, p_diam, p_elev = place_particle(g1, g2, random_diam)
+        p_x, p_diam, p_y = place_particle(g1, g2, random_diam)
         #  update cell in model_particles
-        model_particles[particle][0] = p_center
-        model_particles[particle][1] = p_diam
-        model_particles[particle][2] = p_elev
+        model_particles[particle][0] = p_x
+        model_particles[particle][2] = p_y
+        model_particles[particle][2] = p_diam
         model_particles[particle][3] = particle # id number for each particle
-        
-        
-#       
+         
+         #### FOR TESTING:
 #        print("Vertex Index: %d \n" \
 #              "Neighbours (radius, (x,y)):\n"
 #              "Left Neighbour: (%.2f, (%.2f, %.2f))" \
@@ -236,11 +237,11 @@ def place_model_particles(vertex_idx, bed_particles):
 #              % (vertex[0], g1[0]/2, g1[2], g1[3], g2[0]/2, g2[2], g2[3]))
 #        plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)        
 #        pause()
+         ####
         
     return model_particles, chosen_vertex
  
 ### Calls/Script Section
-
 avaliable_vertices = np.zeros(x_max, dtype=bool)
 
 avaliable_vertices[bed_particles[1:,1].astype(int)] = 1
@@ -253,3 +254,19 @@ plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 10
 ### End Calls/Script Section
 
 ############################################################################### 
+#%% Model particles have been placed on the bed; stream build is complete.
+# Divide stream into sampling regions and build sampling array to store data
+Bed_sampreg = 25
+# Data storage arrays
+Nu_out_Store = np.zeros([Bed_sampreg, Loops], dtype=int, order='F')#[0]
+# Bed sampling boundaries in the x-direction
+BS_boundaries = (XCoordinates_Orig + (x_max / Bed_sampreg) *
+                 np.arange(0, Bed_sampreg + 1, dtype=int))
+SSamp_len = len(BS_boundaries)
+# Index to hold boundaries between subsampling regions to facilitate random
+# sampling from within each region.
+SubSampl_idx = np.zeros([1, SSamp_len], dtype=int, order='F')
+xB_idx = np.zeros([1, 2], dtype=int, order='F')
+yB_idx = np.zeros([1, 2], dtype=int, order='F')
+
+
