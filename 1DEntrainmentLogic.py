@@ -77,7 +77,7 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
         else: continue
     
     # bed can be packed +- 8mm from the default x_max of 500 depending on the 
-    # packing pattern -- therefore update x_max once bed is complete
+    # packing pattern -- therefore update x_max once bed is complete to new +- 8mm size
     x_max = int(math.ceil(bed_particles[current_id-1][0] + bed_particles[current_id-1][1]))
     # strip zero element particles tuples
     valid = ((bed_particles==0).all(axis=(1)))
@@ -157,6 +157,7 @@ def determine_num_particles(pack_frac, num_vertices):
 def place_particle(g1, g2, p_diam):
     """ put function definition here """
     
+    # initialize neighbour (g1 and g2) and placed particle information using info from the storage arrays
     x1 = g1[2]
     x2 = g2[2]
     y1 = g1[3]
@@ -165,13 +166,17 @@ def place_particle(g1, g2, p_diam):
     r2 = g2[0] / 2
     rp = p_diam / 2 
     
+    # define symbols(variables) for symbolic system solution using SymPy
     x3, y3 = sy.symbols('x3 y3')
     
-    eq1 = sy.Eq(sy.sqrt((x1-x3)**2 + (y1-y3)**2)-r1-rp)
-    eq2 = sy.Eq(sy.sqrt((x2-x3)**2 + (y2-y3)**2)-r2-rp)
+    # create symbolic system equations
+    eq1 = sy.Eq(sy.sqrt((x1-x3)**2 + (y1-y3)**2)-r1-rp, 0)
+    eq2 = sy.Eq(sy.sqrt((x2-x3)**2 + (y2-y3)**2)-r2-rp, 0)
     
+    # solve the system of equations
     sol_dict = sy.solve((eq1,eq2), (x3, y3))
         
+    # iterate into the solution dictionary to recieve particle center (x,y)
     p_x = (sol_dict[1][0])
     p_y = (sol_dict[1][1])
  
@@ -197,21 +202,25 @@ def place_model_particles(vertex_idx, bed_particles):
     Returns n-3 array containing the center coordinate, diameter and elevation
     of each individual particle """
     
+    # create a boolean area representing the avaliability of the vertices
     num_vertices = np.size(vertex_idx)
     already_selected = [False] * num_vertices
+    
+    # determine the number of model particles that should be introduced into the stream bed
     num_particles = determine_num_particles(Pack, num_vertices)
-    model_particles = np.zeros([max_particles, 4], dtype='float')
+    # create an empty n-4 array to store model particle information
+    model_particles = np.zeros([num_particles, 4], dtype='float')
     
     #### FOR TESTING:
     chosen_vertex = np.zeros(num_particles)
     ####
     
-    for particle in range(num_particles):
-        
+    for particle in range(num_particles):  
 #        random_diam = random.randint(min_diam, max_diam)
         random_diam = 5.0
         
-        # select vertex and ensure it has not previously been selected
+        # the following lines select a vertex to place the current particle at, 
+        # and ensure that it is not already occupied by another particle
         random_idx = random.randint(0, np.size(vertex_idx)-1)
         while already_selected[random_idx]:
             random_idx = random.randint(0, np.size(vertex_idx)-1)
@@ -222,12 +231,15 @@ def place_model_particles(vertex_idx, bed_particles):
         chosen_vertex[particle] = vertex
         ####
         
+        # once a vertex is chosen, this function identifies the neighbours
         g1, g2 = find_neighbours_of(random_idx)
+        # get the particles initial x, y and diameter information in the bed
         p_x, p_diam, p_y = place_particle(g1, g2, random_diam)
-        #  update cell in model_particles
+        
+        # intialize the particle information
         model_particles[particle][0] = p_x
         model_particles[particle][2] = p_y
-        model_particles[particle][2] = p_diam
+        model_particles[particle][1] = p_diam
         model_particles[particle][3] = particle # id number for each particle
          
          #### FOR TESTING:
@@ -248,7 +260,6 @@ avaliable_vertices = np.zeros(x_max, dtype=bool)
 avaliable_vertices[bed_particles[1:,1].astype(int)] = 1
 # x-indexes of avaliable vertices to place model particles at
 vertex_idx = np.transpose(np.nonzero(avaliable_vertices))
-
 
 model_particles, chosen_vertex = place_model_particles(vertex_idx, bed_particles)
 plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)
@@ -272,6 +283,45 @@ bed_sampreg = 25
 #yB_idx = np.zeros([1, 2], dtype=int, order='F')
 
 ###############################################################################
-#
+# number of model iterations  
+n_iterations = 1
+lambda_1 = 3
+# Particle travel time minimum (t).
+T_pmin = 0
+# Particle travel time maximum (t).
+T_pmax = 1.0
+e_events_store = [0]
 
+def move_model_particles(e_events):
+    # uniform distribution constrained by Fathel et al., 2015.
+#    if n == 0 and Nu_in > 0:
+#        continue
+    
+    T_p_init1 = (np.random.uniform(T_pmin, T_pmax, e_events).
+                 reshape(1, e_events))
+    # https:\\stackoverflow.com\questions\2106503\
+    # Now distribute the random variables over a pseudo exponential
+    # distribution based on inverse transform sampling.
+    T_p_init2 = np.log(1 - T_p_init1) / (-lambda_1)
+    T_p_alt2 = -10 * np.log(1-T_p_init1)
+    # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
+    # For now I am multuplying by 10 so units are consistent (). Rounding
+    # the output to map the entrained particles to the 2D grid.
+    L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
+#    print(e_events, L_x_init)
+
+
+for step in range(n_iterations):
+    # entrainment events per unit area of stream bed
+    e_events = np.random.poisson(lambda_1, None)
+    if e_events == 0:
+        continue
+        e_events = 1
+    # total number of entrained particles
+    e_grains = e_events * bed_sampreg
+    rand_entrainment_loc = random.sample(model_particles, e_events)
+    print(rand_entrainment_loc)
+    move_model_particles(e_events)
+    
+#    
 
