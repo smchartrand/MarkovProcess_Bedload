@@ -255,9 +255,10 @@ def place_model_particles(vertex_idx, bed_particles):
     new_vertices = new_vertices.flatten()
     old_vertices = vertex_idx.flatten()
     
-    updated_vertices = insort(new_vertices, old_vertices)
+    # retrieve all vertices present in the stream. Currently does not filter out unavaliable vertices
+    total_vertices = insort(new_vertices, old_vertices)
     
-    return model_particles, chosen_vertex, updated_vertices
+    return model_particles, chosen_vertex, total_vertices
 
 # from: https://stackoverflow.com/questions/12427146/combine-two-arrays-and-sort
 def insort(a, b, kind='mergesort'):
@@ -308,6 +309,7 @@ T_pmin = 0
 T_pmax = 1.0
 e_events_store = np.zeros(n_iterations)
 
+# TODO: Need to move n particles (n = e_events) per subregion, not from whole stream
 def move_model_particles(e_events, rand_particles):
     # uniform distribution constrained by Fathel et al., 2015.
 #    if n == 0 and Nu_in > 0:
