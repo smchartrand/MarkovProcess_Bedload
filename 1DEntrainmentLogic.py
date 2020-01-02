@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle
 
-# For Testing: REMOVE BEFORE SUBMISSION
+# FOR TESTING: 
 def pause():
     programPause = raw_input("Press the <ENTER> key to continue...")
 
@@ -105,7 +105,7 @@ def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_l
     """ Plot the complete stream from 0,0 to x_lim and y_lim. Bed particles 
     are plotted as light grey and model particles are dark blue. Allows
     for closer look at state of a subregion of the stream during simulation """
-    
+    plt.clf()
     fig = plt.figure(1)
     fig.set_size_inches(10.5, 6.5)
     ax = fig.add_subplot(1, 1, 1, aspect='equal')
@@ -132,13 +132,16 @@ def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_l
     for x2, y2, r in zip(x_center_m, y_center_m, model_particles[:,1]/2):
         circle = Circle((x2, y2), r)
         patches1.append(circle)
-    p_m = (PatchCollection(patches1, facecolors='none', edgecolors='r'))
+    p_m = (PatchCollection(patches1, facecolors='black', edgecolors='black'))
     ax.add_collection(p_m)
     ### FOR TESTING: Plots the avaliable and chosen vertex lines 
-    for xc in vertex_idx:
-        plt.axvline(x=xc, color='b', linestyle='-')
-    for green in chosen_vertex:
-        plt.axvline(x=green, color='g', linestyle='-')
+    # uncomment for loop sections to draw the corresponding lines on figure
+#    for xc in vertex_idx:
+#        plt.axvline(x=xc, color='b', linestyle='-')
+#    for xxc in total_vertices:
+#        plt.axvline(x=xxc, color='m', linestyle='-')
+#    for green in chosen_vertex:
+#        plt.axvline(x=green, color='g', linestyle='-')
     ### 
     plt.show()
     return
@@ -166,15 +169,15 @@ def place_particle(g1, g2, p_diam):
     r2 = g2[0] / 2
     rp = p_diam / 2 
     
-    # define symbols(variables) for symbolic system solution using SymPy
+    # define symbols for symbolic system solution using SymPy
     x3, y3 = sy.symbols('x3 y3')
     
-    # create symbolic system equations
+    # create the symbolic system equations
     eq1 = sy.Eq(sy.sqrt((x1-x3)**2 + (y1-y3)**2)-r1-rp, 0)
     eq2 = sy.Eq(sy.sqrt((x2-x3)**2 + (y2-y3)**2)-r2-rp, 0)
     
     # solve the system of equations
-    sol_dict = sy.solve((eq1,eq2), (x3, y3))
+    sol_dict = sy.solve((eq1, eq2), (x3, y3))
         
     # iterate into the solution dictionary to recieve particle center (x,y)
     p_x = (sol_dict[1][0])
@@ -201,7 +204,7 @@ def place_model_particles(vertex_idx, bed_particles):
     """ Randomly choose vertices from vertex_idx to place n particles. 
     Returns n-3 array containing the center coordinate, diameter and elevation
     of each individual particle """
-    
+
     # create a boolean area representing the avaliability of the vertices
     num_vertices = np.size(vertex_idx)
     already_selected = [False] * num_vertices
@@ -214,6 +217,8 @@ def place_model_particles(vertex_idx, bed_particles):
     #### FOR TESTING:
     chosen_vertex = np.zeros(num_particles)
     ####
+    
+    new_vertices = np.zeros((num_particles,2))
     
     for particle in range(num_particles):  
 #        random_diam = random.randint(min_diam, max_diam)
@@ -241,28 +246,39 @@ def place_model_particles(vertex_idx, bed_particles):
         model_particles[particle][2] = p_y
         model_particles[particle][1] = p_diam
         model_particles[particle][3] = particle # id number for each particle
-         
-         #### FOR TESTING:
-#        print("Vertex Index: %d \n" \
-#              "Neighbours (radius, (x,y)):\n"
-#              "Left Neighbour: (%.2f, (%.2f, %.2f))" \
-#              "\nRight Neighbour: (%.2f, (%.2f, %.2f))"\
-#              % (vertex[0], g1[0]/2, g1[2], g1[3], g2[0]/2, g2[2], g2[3]))
-#        plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)        
-#        pause()
-         ####
         
-    return model_particles, chosen_vertex
+        # store each particles vertex information in new_vertices
+        new_vertices[particle][0] = (p_x) - (p_diam/2)
+        new_vertices[particle][1] = (p_x) + (p_diam/2)
+    
+    # flatten both vertex arrays so that they can be merged together by insort()
+    new_vertices = new_vertices.flatten()
+    old_vertices = vertex_idx.flatten()
+    
+    updated_vertices = insort(new_vertices, old_vertices)
+    
+    return model_particles, chosen_vertex, updated_vertices
+
+# from: https://stackoverflow.com/questions/12427146/combine-two-arrays-and-sort
+def insort(a, b, kind='mergesort'):
+    # took mergesort as it seemed a tiny bit faster for my sorted large array try.
+    c = np.concatenate((a, b)) # we still need to do this unfortunatly.
+    c.sort(kind=kind)
+    flag = np.ones(len(c), dtype=bool)
+    np.not_equal(c[1:], c[:-1], out=flag[1:])
+    return c[flag]
+
  
+    
 ### Calls/Script Section
 avaliable_vertices = np.zeros(x_max, dtype=bool)
 
 avaliable_vertices[bed_particles[1:,1].astype(int)] = 1
 # x-indexes of avaliable vertices to place model particles at
-vertex_idx = np.transpose(np.nonzero(avaliable_vertices))
+bed_vertices = np.transpose(np.nonzero(avaliable_vertices))
 
-model_particles, chosen_vertex = place_model_particles(vertex_idx, bed_particles)
-plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 100, 100/4)
+model_particles, chosen_vertex, total_vertices = place_model_particles(bed_vertices, bed_particles)
+plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 500, 100/4)
 ### End Calls/Script Section
 
 ############################################################################### 
@@ -284,19 +300,19 @@ bed_sampreg = 25
 
 ###############################################################################
 # number of model iterations  
-n_iterations = 1
-lambda_1 = 3
+n_iterations = 10
+lambda_1 = 1
 # Particle travel time minimum (t).
 T_pmin = 0
 # Particle travel time maximum (t).
 T_pmax = 1.0
-e_events_store = [0]
+e_events_store = np.zeros(n_iterations)
 
-def move_model_particles(e_events):
+def move_model_particles(e_events, rand_particles):
     # uniform distribution constrained by Fathel et al., 2015.
 #    if n == 0 and Nu_in > 0:
 #        continue
-    
+    global total_vertices
     T_p_init1 = (np.random.uniform(T_pmin, T_pmax, e_events).
                  reshape(1, e_events))
     # https:\\stackoverflow.com\questions\2106503\
@@ -308,20 +324,52 @@ def move_model_particles(e_events):
     # For now I am multuplying by 10 so units are consistent (). Rounding
     # the output to map the entrained particles to the 2D grid.
     L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
-#    print(e_events, L_x_init)
+    
+    # update the particle information to be original_x + hop distance
+    rand_particles[:,0] = rand_particles[:,0] + L_x_init
+
+    # now, update model_particle array for each of the randomly selected particles
+    for idx, particle_id in enumerate(rand_particles[:,3]):
+        model_particles[int(particle_id)] = rand_particles[idx]
+    
+    # create empty n-2 array to hold the vertices of the model particles
+    new_vertices = np.zeros((num_particles,2))
+    # for each model particle, store what would be its vertex values in new_vertices
+    for idx, particle in enumerate(model_particles):
+        new_vertices[idx][0] = particle[0] - particle[1]/2
+        new_vertices[idx][1] = particle[0] + particle[1]/2
+    
+    # flatten both vertex arrays so that we can merge them together 
+    new_vertices = new_vertices.flatten()
+    old_vertices = bed_vertices.flatten()
+    
+    # get array of all vertices in the stream. Does _not_ account for availability
+    total_vertices = insort(new_vertices, old_vertices)
+    
+    ## FOR TESTING:
+    # sleep to more easily see the bed migration in matplotlib
+    time.sleep(1)  
+    ###
+    
+    plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 500, 100/4)
 
 
 for step in range(n_iterations):
-    # entrainment events per unit area of stream bed
+    # calculate the number of entrainment events per unit area of bed
     e_events = np.random.poisson(lambda_1, None)
+
     if e_events == 0:
-        continue
-        e_events = 1
+        e_events = 1 #???
+        
     # total number of entrained particles
     e_grains = e_events * bed_sampreg
-    rand_entrainment_loc = random.sample(model_particles, e_events)
-    print(rand_entrainment_loc)
-    move_model_particles(e_events)
+    # randomly select model particles to entrain then convert to numpy array
+    rand_particles = random.sample(model_particles, e_events)
+    rand_particles = np.array(rand_particles)
     
-#    
+    move_model_particles(e_events, rand_particles)
+    e_events_store[step] = e_events
+    
+    
+
 
