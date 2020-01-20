@@ -4,6 +4,8 @@ import random
 import time
 import numpy as np
 import sympy as sy
+import copy
+import collections
 
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
@@ -138,9 +140,9 @@ def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_l
     # uncomment for loop sections to draw the corresponding lines on figure
 #    for xc in vertex_idx:
 #        plt.axvline(x=xc, color='b', linestyle='-')
-#    for xxc in total_vertices:
-#        plt.axvline(x=xxc, color='m', linestyle='-')
-#    for green in chosen_vertex:
+    for xxc in valid_vertices:
+        plt.axvline(x=xxc, color='m', linestyle='-')
+##    for green in chosen_vertex:
 #        plt.axvline(x=green, color='g', linestyle='-')
     ### 
     plt.show()
@@ -200,13 +202,13 @@ def find_neighbours_of(idx):
     return g1, g2
 
 
-def place_model_particles(vertex_idx, bed_particles):
+def place_model_particles(bed_vertices, bed_particles):
     """ Randomly choose vertices from vertex_idx to place n particles. 
     Returns n-3 array containing the center coordinate, diameter and elevation
     of each individual particle """
 
     # create a boolean area representing the avaliability of the vertices
-    num_vertices = np.size(vertex_idx)
+    num_vertices = np.size(bed_vertices)
     already_selected = [False] * num_vertices
     
     # determine the number of model particles that should be introduced into the stream bed
@@ -219,6 +221,8 @@ def place_model_particles(vertex_idx, bed_particles):
     ####
     
     new_vertices = np.zeros((num_particles,2))
+    nulled_vertices = np.zeros((num_particles))
+    
     
     for particle in range(num_particles):  
 #        random_diam = random.randint(min_diam, max_diam)
@@ -226,11 +230,11 @@ def place_model_particles(vertex_idx, bed_particles):
         
         # the following lines select a vertex to place the current particle at, 
         # and ensure that it is not already occupied by another particle
-        random_idx = random.randint(0, np.size(vertex_idx)-1)
+        random_idx = random.randint(0, np.size(bed_vertices)-1)
         while already_selected[random_idx]:
-            random_idx = random.randint(0, np.size(vertex_idx)-1)
+            random_idx = random.randint(0, np.size(bed_vertices)-1)
         already_selected[random_idx] = True
-        vertex = vertex_idx[random_idx]
+        vertex = bed_vertices[random_idx]
         
         #### FOR TESTING: 
         chosen_vertex[particle] = vertex
@@ -247,18 +251,18 @@ def place_model_particles(vertex_idx, bed_particles):
         model_particles[particle][1] = p_diam
         model_particles[particle][3] = particle # id number for each particle
         
+        nulled_vertices[particle] = vertex
         # store each particles vertex information in new_vertices
         new_vertices[particle][0] = (p_x) - (p_diam/2)
         new_vertices[particle][1] = (p_x) + (p_diam/2)
-    
+        
     # flatten both vertex arrays so that they can be merged together by insort()
     new_vertices = new_vertices.flatten()
-    old_vertices = vertex_idx.flatten()
+    bed_vertices = bed_vertices.flatten()
+        
+    valid_vertices = compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices)
     
-    # retrieve all vertices present in the stream. Currently does not filter out unavaliable vertices
-    total_vertices = insort(new_vertices, old_vertices)
-    
-    return model_particles, chosen_vertex, total_vertices
+    return model_particles, chosen_vertex, num_particles, valid_vertices, nulled_vertices
 
 # from: https://stackoverflow.com/questions/12427146/combine-two-arrays-and-sort
 def insort(a, b, kind='mergesort'):
@@ -269,6 +273,17 @@ def insort(a, b, kind='mergesort'):
     np.not_equal(c[1:], c[:-1], out=flag[1:])
     return c[flag]
 
+def compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices):
+    valid_vertices = copy.deepcopy(bed_vertices)
+    
+    nulled_set = set(nulled_vertices)&set(bed_vertices)
+    valid_vertices = list(set(bed_vertices)-nulled_set)
+    element_count = collections.Counter(new_vertices)
+    valid_new_vertices = [item for item in element_count if element_count[item]>1]
+#    valid_vertices = valid_vertices.append(valid_new_vertices)
+    valid_vertices = insort(valid_vertices, valid_new_vertices)
+    return valid_vertices
+
  
     
 ### Calls/Script Section
@@ -278,8 +293,8 @@ avaliable_vertices[bed_particles[1:,1].astype(int)] = 1
 # x-indexes of avaliable vertices to place model particles at
 bed_vertices = np.transpose(np.nonzero(avaliable_vertices))
 
-model_particles, chosen_vertex, total_vertices = place_model_particles(bed_vertices, bed_particles)
-plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 500, 100/4)
+model_particles, chosen_vertex, num_particles, valid_vertices, nulled_vertices = place_model_particles(bed_vertices, bed_particles)
+plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 150, 100/4)
 ### End Calls/Script Section
 
 ############################################################################### 
@@ -314,23 +329,40 @@ def move_model_particles(e_events, rand_particles):
     # uniform distribution constrained by Fathel et al., 2015.
 #    if n == 0 and Nu_in > 0:
 #        continue
-    global total_vertices
+    global valid_vertices
+    global nulled_vertices
+    global bed_vertices
+    
     T_p_init1 = (np.random.uniform(T_pmin, T_pmax, e_events).
                  reshape(1, e_events))
     # https:\\stackoverflow.com\questions\2106503\
     # Now distribute the random variables over a pseudo exponential
     # distribution based on inverse transform sampling.
     T_p_init2 = np.log(1 - T_p_init1) / (-lambda_1)
-    T_p_alt2 = -10 * np.log(1-T_p_init1)
     # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
     # For now I am multuplying by 10 so units are consistent (). Rounding
     # the output to map the entrained particles to the 2D grid.
     L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
     
     # update the particle information to be original_x + hop distance
-    rand_particles[:,0] = rand_particles[:,0] + L_x_init
+    unverified_hop = rand_particles[:,0] + L_x_init
+    reintroduced_vertices = rand_particles[:,0]
+    # find the closest valid vertex to unverified_hop location 
+    verified_hop_placement = np.zeros(e_events)
+#    print(unverified_hop.flatten())
+    for i, item in enumerate(unverified_hop[0]): 
+        # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
+        try:    
+            verified_hop = next(x[1] for x in enumerate(valid_vertices) if np.any(x[1] >= unverified_hop[0][i]))
+            verified_hop_placement[i] = verified_hop
+        # TODO: this is a temporary fix!!! Particles that leave the stream get put at -1
+        except StopIteration:
+            verified_hop_placement[i] = -1
+            print("StopIteration Exception Occured")
+    
+    rand_particles[:,0] = verified_hop_placement
 
-    # now, update model_particle array for each of the randomly selected particles
+    # now, update model_particle array with new x_location for each of the randomly selected particles
     for idx, particle_id in enumerate(rand_particles[:,3]):
         model_particles[int(particle_id)] = rand_particles[idx]
     
@@ -341,19 +373,21 @@ def move_model_particles(e_events, rand_particles):
         new_vertices[idx][0] = particle[0] - particle[1]/2
         new_vertices[idx][1] = particle[0] + particle[1]/2
     
-    # flatten both vertex arrays so that we can merge them together 
+    # TODO: update the nulled vertices (add back and remove)
+#    nulled_vertices = nulled_vertices.append(verified_hop_placement)
+#    nulled_vertices = nulled_vertices.flatten()
+#    print(nulled_vertices)
     new_vertices = new_vertices.flatten()
-    old_vertices = bed_vertices.flatten()
-    
-    # get array of all vertices in the stream. Does _not_ account for availability
-    total_vertices = insort(new_vertices, old_vertices)
+    bed_vertices = bed_vertices.flatten()
+    # flatten both vertex arrays so that we can merge them together 
+    valid_vertices = compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices)
     
     ## FOR TESTING:
     # sleep to more easily see the bed migration in matplotlib
-    time.sleep(1)  
+    time.sleep(1)
     ###
     
-    plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 500, 100/4)
+    plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 150, 100/4)
 
 
 for step in range(n_iterations):
@@ -365,7 +399,7 @@ for step in range(n_iterations):
         
     # total number of entrained particles
     e_grains = e_events * bed_sampreg
-    # randomly select model particles to entrain then convert to numpy array
+    # randomly select model particles to entrain per unit area of bed
     rand_particles = random.sample(model_particles, e_events)
     rand_particles = np.array(rand_particles)
     
