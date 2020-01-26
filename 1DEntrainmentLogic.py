@@ -273,13 +273,34 @@ def insort(a, b, kind='mergesort'):
     np.not_equal(c[1:], c[:-1], out=flag[1:])
     return c[flag]
 
+'''
+This method computes the valid vertex set provided NumPy arrays of the 
+bed verticed, newly introduced vertices and nulled vertices.
+
+Bed vertices is the static set of vertices introduced by the bed formation
+established at the start of this model. The set of vertices are those verticle
+lines tracing the touching points of the bed particles.
+
+Newly introduced verticed (new_vertices) are those vertices that a newly placed
+particle introduces into the vertex calculation. For example, a particle of 
+radius 2.5 that is placed at axis 55 will introduce vertices 57.5 and 52.5 as 
+two new possible vertices
+
+Nulled vertices are those vertices which are currently occupied by a particle.
+'''
 def compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices):
     valid_vertices = copy.deepcopy(bed_vertices)
     
-    nulled_set = set(nulled_vertices)&set(bed_vertices)
-    valid_vertices = list(set(bed_vertices)-nulled_set)
+    # nulled set is the shared elements between 
+    nulled_bed_set = set(nulled_vertices)&set(bed_vertices)
+    valid_vertices = list(set(bed_vertices)-nulled_bed_set)
+
     element_count = collections.Counter(new_vertices)
     valid_new_vertices = [item for item in element_count if element_count[item]>1]
+    
+    nulled_new_set = set(nulled_vertices)&set(valid_new_vertices)
+    valid_new_vertices = list(set(valid_new_vertices)-nulled_new_set)
+
 #    valid_vertices = valid_vertices.append(valid_new_vertices)
     valid_vertices = insort(valid_vertices, valid_new_vertices)
     return valid_vertices
@@ -346,42 +367,75 @@ def move_model_particles(e_events, rand_particles):
     
     # update the particle information to be original_x + hop distance
     unverified_hop = rand_particles[:,0] + L_x_init
+    particles_self_vertices = rand_particles[:,0] + rand_particles[:,1]/2
     reintroduced_vertices = rand_particles[:,0]
     # find the closest valid vertex to unverified_hop location 
     verified_hop_placement = np.zeros(e_events)
-#    print(unverified_hop.flatten())
-    for i, item in enumerate(unverified_hop[0]): 
-        # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
+    
+    
+    '''
+    This loop will iterate over each proposed hop distance in unverified_hop[]
+    and will identify the closest avaliable vertex to the proposed distance.
+    Once the closest avaliable vertex has been identified, the nulled_vertices
+    array is updated by removing the vertices that particles just vacated and 
+    then by adding the vertices a particle just occupied.
+    
+    If we want to take away a particles self vertices from the simulation then 
+    simple uncomment the valid_without_self initialization and replace the 
+    enumeration of valid_vertices with valid_without_self. This will force a 
+    particle to be pushed to the next avaliable vartex instead of falling back 
+    into it's original vartex (i.e as if it was never entrained at all). If this
+    way is implemented, one can also comment out the verification loop which
+    checks 'if verified_hop == particles_self_vertices[i]' as it is not necessary
+    '''
+    for i, _ in enumerate(unverified_hop[0]): 
+        print("Particle " + str(int(rand_particles[i,3])) + " being entrained from " + str(rand_particles[i,0]))
+#        valid_without_self = [x for x in valid_vertices if x not in particles_self_vertices]
         try:    
+            # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
             verified_hop = next(x[1] for x in enumerate(valid_vertices) if np.any(x[1] >= unverified_hop[0][i]))
+            
+            # check that the verified hop distances is not equal to a particles self_vertex
+            if verified_hop == particles_self_vertices[i]:
+                print("Caught self placement at " + str(particles_self_vertices[i] + " returning particle to original vertex..."))
+                verified_hop = rand_particles[i,0]
+                
             verified_hop_placement[i] = verified_hop
+            try:
+                nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]]
+                nulled_vertices = np.append(nulled_vertices, verified_hop)
+            except ValueError:
+                print("verified_hop value not in np array")
+            except AttributeError:
+                print(AttributeError)         
         # TODO: this is a temporary fix!!! Particles that leave the stream get put at -1
         except StopIteration:
             verified_hop_placement[i] = -1
             print("StopIteration Exception Occured")
-    
+
+    ''' update the x-location in rand_particles with the verified_hop '''
     rand_particles[:,0] = verified_hop_placement
 
+    
     # now, update model_particle array with new x_location for each of the randomly selected particles
     for idx, particle_id in enumerate(rand_particles[:,3]):
         model_particles[int(particle_id)] = rand_particles[idx]
     
     # create empty n-2 array to hold the vertices of the model particles
     new_vertices = np.zeros((num_particles,2))
-    # for each model particle, store what would be its vertex values in new_vertices
+    # for each model particle, store what would be its new vertex values in new_vertices
     for idx, particle in enumerate(model_particles):
-        new_vertices[idx][0] = particle[0] - particle[1]/2
-        new_vertices[idx][1] = particle[0] + particle[1]/2
+        new_vertices[idx][0] = particle[0] - particle[1]/2 # left vertex
+        new_vertices[idx][1] = particle[0] + particle[1]/2 # right vertex
+
     
-    # TODO: update the nulled vertices (add back and remove)
 #    nulled_vertices = nulled_vertices.append(verified_hop_placement)
 #    nulled_vertices = nulled_vertices.flatten()
 #    print(nulled_vertices)
     new_vertices = new_vertices.flatten()
     bed_vertices = bed_vertices.flatten()
     # flatten both vertex arrays so that we can merge them together 
-    valid_vertices = compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices)
-    
+    valid_vertices = compute_valid_vertices(valid_vertices, new_vertices, nulled_vertices)   
     ## FOR TESTING:
     # sleep to more easily see the bed migration in matplotlib
     time.sleep(1)
