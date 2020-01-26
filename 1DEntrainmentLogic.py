@@ -397,7 +397,7 @@ def move_model_particles(e_events, rand_particles):
             
             # check that the verified hop distances is not equal to a particles self_vertex
             if verified_hop == particles_self_vertices[i]:
-                print("Caught self placement at " + str(particles_self_vertices[i] + " returning particle to original vertex..."))
+                print("Caught self placement at " + str(particles_self_vertices[i]) + " ... returning particle to original vertex")
                 verified_hop = rand_particles[i,0]
                 
             verified_hop_placement[i] = verified_hop
@@ -411,7 +411,7 @@ def move_model_particles(e_events, rand_particles):
         # TODO: this is a temporary fix!!! Particles that leave the stream get put at -1
         except StopIteration:
             verified_hop_placement[i] = -1
-            print("StopIteration Exception Occured")
+            print("Particle exceeded stream... sending to -1 axis as temporary fix")
 
     ''' update the x-location in rand_particles with the verified_hop '''
     rand_particles[:,0] = verified_hop_placement
@@ -435,7 +435,7 @@ def move_model_particles(e_events, rand_particles):
     new_vertices = new_vertices.flatten()
     bed_vertices = bed_vertices.flatten()
     # flatten both vertex arrays so that we can merge them together 
-    valid_vertices = compute_valid_vertices(valid_vertices, new_vertices, nulled_vertices)   
+    valid_vertices = compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices)   
     ## FOR TESTING:
     # sleep to more easily see the bed migration in matplotlib
     time.sleep(1)
