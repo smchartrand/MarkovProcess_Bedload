@@ -375,8 +375,8 @@ def move_model_particles(e_events, event_particles, valid_vertices):
     This loop will iterate over each proposed hop distance in unverified_hop[]
     and will identify the closest avaliable vertex to the proposed distance.
     Once the closest avaliable vertex has been identified, the nulled_vertices
-    array is updated by removing the vertices that have just been vacated and 
-    then adding the vertices just recently occupied.
+    array is updated by removing the vertices that have just been vacated (they
+    are no longer considered nulled) and then adding the vertices just recently occupied.
     
     If we want to take away a particles self vertices from the simulation then 
     simple uncomment the valid_without_self initialization and replace the 
@@ -387,31 +387,37 @@ def move_model_particles(e_events, event_particles, valid_vertices):
     checks 'if verified_hop == particles_self_vertices[i]' as it is not necessary
     '''
     for i, _ in enumerate(unverified_hop[0]): 
-        print("Particle " + str(int(event_particles[i,3])) + " being entrained from " + str(event_particles[i,0]))
 #        valid_without_self = [x for x in valid_vertices if x not in particles_self_vertices]
         try:    
             # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
             # iterate over the valid vertex set and identify the closest vertex equal to or greater than  unverified_hop
             verified_hop = next(x[1] for x in enumerate(valid_vertices) if np.any(x[1] >= unverified_hop[0][i]))
             
-            # check that the verified hop distances is not equal to a particles self_vertex
+            # check that the verified hop distances is not equal to a particles self_vertex (being placed at it's own vertex)
             if verified_hop == particles_self_vertices[i]:
                 print("Caught self placement at " + str(particles_self_vertices[i]) + " ... returning particle to original vertex")
                 verified_hop = event_particles[i,0]
                 
             verified_hop_placement[i] = verified_hop
+            print("Particle " + str(int(event_particles[i,3])) + " being entrained from " + str(event_particles[i,0]) + " to " + str(verified_hop))
             try:
-                nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]]
+                # take nulled vertices without the reintroduced vertex
+                nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
+                # append the newly occupied vertex to nulled vertices
+                print(verified_hop)
                 nulled_vertices = np.append(nulled_vertices, verified_hop)
             except ValueError:
                 print("verified_hop value not in np array")
             except AttributeError:
                 print(AttributeError)         
-        # TODO: this is a temporary fix!!! Particles that leave the stream get put at -1
+        
         except StopIteration:
             # particle has looped around. Need to add it to the waiting list
             verified_hop_placement[i] = -1
             print("Particle exceeded stream... sending to -1 axis as temporary fix")
+        print(nulled_vertices)
+            
+        
 
     # update the x-location in rand_particles with the verified_hop 
     event_particles[:,0] = verified_hop_placement
@@ -456,7 +462,6 @@ given immediately to move_model_particles. If there are particles in 'queue'
 then these particles are added to the raondomly selected set, and all are
 passed to move_model_particles.
 '''
-
 for step in range(n_iterations):
     # calculate the number of entrainment events per unit area of bed
     e_events = np.random.poisson(lambda_1, None)
@@ -470,15 +475,16 @@ for step in range(n_iterations):
     event_particles = random.sample(model_particles, e_events)
     event_particles = np.array(event_particles)
     
+    ''' for this loop, identify the particles at x=-1 and add them all to the
+    event_particles array '''
     # find all particles at x=-1 (particles in queue)
     ii = np.where(model_particles == -1)[0]
+    
     for index in ii:
         print(model_particles[index])
         model_particles[index][0] = 0 # send particle to 0 (starting point)
         event_particles = np.vstack((event_particles, model_particles[index]))
         e_events = e_events + 1
-        
-    print(event_particles)
     
     valid_vertices = move_model_particles(e_events, event_particles, valid_vertices)
     e_events_store[step] = e_events
