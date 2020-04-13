@@ -6,6 +6,7 @@ import numpy as np
 import sympy as sy
 import copy
 import collections
+import parameters # Import the parameters defined in the parameters file
 
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
@@ -16,43 +17,20 @@ def pause():
     programPause = raw_input("Press the <ENTER> key to continue...")
 
 ############################################################################### 
-#%% initial parameter for particles and plotting
-Area = np.zeros([1, 1], dtype=int, order='F')
-# Total area of placed circles. Initialize to 0.
-AreaTotal = 0
-# Center coord. of placed circles: r1:x,r2:y.
-CenterCoord = np.zeros(1, dtype=int, order='F')
-Diameter = np.zeros(1, dtype=int, order='F')
-CenterElev = np.zeros(1, dtype=int, order='F')
-Color_iter = 1000
-Step_1 = 1
-# Define origin for plotting.
-XCoordinates_Orig = 0
-# Packing density of the bed; ranges from > 0 to <~0.70.
-Pack = 0.52
-# Length of the domain in the streamwise direction in millimeters.
-x_max = 500
-# Spacing of nodes in millimeters.
-Grid_Spacing = 1
-# Minimum grain diameter in millimeters.
-min_diam = 4.0
-# Size of largest grain relative to the cross-stream length.
-Size_Frac = 0.06
-max_diam = 6.0 
-
-############################################################################### 
 #%% Initial Packing of Streambed 
+
 def bed_complete(pack_idx):
-    """ Boolean check for whether 1D bed is fully packed or not""" 
+    """ Provided a packing index (current # of particles placed in bed), this 
+    function will return a Boolean indicating whether the bed packing is complete """ 
     # similarly, if np.count_nonzero(bed_space) == x_max
-    if pack_idx >= x_max:
+    if pack_idx >= parameters.x_max:
         return 1
     else: return 0
   
     
 def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
-    """ Add a new particle to the particle set. Ensure parameters are
-    maintained and packing requirements are met """
+    """ This function will add a new particle to the bed_particle array
+    that has random diameter, id=packing_idx, calculated center and elevation """
     
     center = pack_idx + (random_diam/2)
 
@@ -71,9 +49,7 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
     starting idx, x coord and y coord. Array index = particle id """
     global x_max
     while True:
-#        random_diam = random.randint(min_diam, max_diam)
-        random_diam = 5.0
-        current_id, pack_idx = pack_bed(random_diam, bed_particles, current_id, pack_idx)
+        current_id, pack_idx = pack_bed(parameters.set_diam, bed_particles, current_id, pack_idx)
         if bed_complete(pack_idx):
             break
         else: continue
@@ -90,19 +66,20 @@ def build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx):
     
 ### Calls/Script Section
 pack_idx = 0
-max_particles = int(math.ceil(x_max/min_diam))
-bed_particles = np.zeros([max_particles, 4],dtype='float')
+max_particles = int(math.ceil( parameters.x_max / parameters.min_diam ))
+bed_particles = np.zeros([max_particles, 4],dtype=float)
 current_id = 0
 
-bed_particles = build_streambed(bed_particles, min_diam, max_diam, current_id, pack_idx)   
+bed_particles = build_streambed(bed_particles, parameters.min_diam, parameters.max_diam, current_id, pack_idx)   
 radius_array = np.asarray((bed_particles[:,0] / 2.0), dtype=float)
 ### End Calls/Script Section
 
-###############################################################################   
+###############################################################################  
+  
 #%% Bed is built. Place/create n particles in avaliable vertices
 ##### NOTE: plot_stream SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
 
-def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_lim, y_lim):
+def plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, x_lim, y_lim, valid_vertices):
     """ Plot the complete stream from 0,0 to x_lim and y_lim. Bed particles 
     are plotted as light grey and model particles are dark blue. Allows
     for closer look at state of a subregion of the stream during simulation """
@@ -187,11 +164,27 @@ def place_particle(g1, g2, p_diam):
     return p_x, p_diam, p_y
 
     
+def find_neighbours_of(idx, model_particles, bed_particles):
+    """ For a given vertex, return the two neighbouring grains of highest level """ 
 
-def find_neighbours_of(idx):
-    """ For a given vertex, return the two neighbouring grains """ 
-    # TODO: Need to update function to consider model particles _as well as_ 
-    # bed particles as possible contact neighbours when being entrained
+    # first, consider model particles:
+    # for a particle to be the left neighbour of idx, its center must be less than or equal to R away
+    # where R is the constant particle radius
+#    left_neighbour = np.where(model_particles[:,0] == idx - (parameters.set_diam / 2))
+#    print(left_neighbour)
+#    
+#    right_neighbour = np.where(model_particles[:,0] == idx + (parameters.set_diam / 2))
+#    print(right_neighbour)
+#
+#    # then look at bed particles:
+#    
+#    # TODO: Need to update function to consider model particles _as well as_ 
+#    # bed particles as possible contact neighbours when being entrained
+#    print(idx, idx - (parameters.set_diam / 2))
+#    grain_x_idx = np.where(bed_particles[:,2] == (idx - (parameters.set_diam / 2)))
+#    print(grain_x_idx)
+#    grain_x = bed_particles[grain_x_idx]
+#    
     grain_x = bed_particles[idx]
     grain_y = bed_particles[idx+1]
     
@@ -203,15 +196,18 @@ def find_neighbours_of(idx):
 
 def set_model_particles(bed_vertices, bed_particles):
     """ Randomly choose vertices from vertex_idx to place n particles. 
-    Returns n-4 array containing the center coordinate, diameter and elevation
-    of each individual particle """
+    Returns n-4 array representing the resulting model particles where
+    [0] = center coordinate,
+    [1] = diameter,
+    [2] = elevation,
+    [3] = uid """
 
     # create a boolean area representing the avaliability of the vertices
     num_vertices = np.size(bed_vertices)
     already_selected = [False] * num_vertices
     
     # determine the number of model particles that should be introduced into the stream bed
-    num_particles = determine_num_particles(Pack, num_vertices)
+    num_particles = determine_num_particles(parameters.Pack, num_vertices)
     # create an empty n-4 array to store model particle information
     model_particles = np.zeros([num_particles, 4], dtype='float')
     
@@ -224,7 +220,6 @@ def set_model_particles(bed_vertices, bed_particles):
     
     
     for particle in range(num_particles):  
-        random_diam = 5.0
         
         # the following lines select a vertex to place the current particle at, 
         # and ensure that it is not already occupied by another particle
@@ -239,9 +234,9 @@ def set_model_particles(bed_vertices, bed_particles):
         ####
         
         # once a vertex is chosen, this function identifies the neighbours
-        g1, g2 = find_neighbours_of(random_idx)
+        g1, g2 = find_neighbours_of(random_idx, model_particles, bed_particles)
         # get the particles initial x, y and diameter information in the bed
-        p_x, p_diam, p_y = place_particle(g1, g2, random_diam)
+        p_x, p_diam, p_y = place_particle(g1, g2, parameters.set_diam)
         
         # intialize the particle information
         model_particles[particle][0] = p_x
@@ -293,6 +288,7 @@ def compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices):
     nulled_bed_set = set(nulled_vertices)&set(bed_vertices)
     valid_vertices = list(set(bed_vertices)-nulled_bed_set)
 
+
     element_count = collections.Counter(new_vertices)
     valid_new_vertices = [item for item in element_count if element_count[item]>1]
     
@@ -313,7 +309,7 @@ avaliable_vertices[bed_particles[1:,1].astype(int)] = 1
 bed_vertices = np.transpose(np.nonzero(avaliable_vertices))
 
 model_particles, chosen_vertex, num_particles, valid_vertices, nulled_vertices = set_model_particles(bed_vertices, bed_particles)
-plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 150, 100/4)
+plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 150, 100/4, valid_vertices)
 ### End Calls/Script Section
 
 ############################################################################### 
@@ -345,10 +341,9 @@ e_events_store = np.zeros(n_iterations)
 
 # TODO: Need to move n particles (n = e_events) per subregion, not from whole stream
 ''' 
-This function takes the number of entrainment events per subregion and an array
-of particles and 
+This needs a description.
 '''
-def move_model_particles(e_events, event_particles, valid_vertices):
+def move_model_particles(e_events, event_particles, valid_vertices, model_particles, bed_particles):
 
     global nulled_vertices
     global bed_vertices
@@ -400,11 +395,12 @@ def move_model_particles(e_events, event_particles, valid_vertices):
                 
             verified_hop_placement[i] = verified_hop
             print("Particle " + str(int(event_particles[i,3])) + " being entrained from " + str(event_particles[i,0]) + " to " + str(verified_hop))
+            # Need to check if particle is being placed between two particles here:
+
             try:
                 # take nulled vertices without the reintroduced vertex
                 nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
                 # append the newly occupied vertex to nulled vertices
-                print(verified_hop)
                 nulled_vertices = np.append(nulled_vertices, verified_hop)
             except ValueError:
                 print("verified_hop value not in np array")
@@ -414,10 +410,8 @@ def move_model_particles(e_events, event_particles, valid_vertices):
         except StopIteration:
             # particle has looped around. Need to add it to the waiting list
             verified_hop_placement[i] = -1
-            print("Particle exceeded stream... sending to -1 axis as temporary fix")
-        print(nulled_vertices)
-            
-        
+            print("Particle exceeded stream... sending to -1 axis as temporary fix") 
+
 
     # update the x-location in rand_particles with the verified_hop 
     event_particles[:,0] = verified_hop_placement
@@ -445,7 +439,7 @@ def move_model_particles(e_events, event_particles, valid_vertices):
     time.sleep(1)
     ###
     
-    plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 150, 100/4)
+    plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 150, 100/4, valid_vertices)
     return valid_vertices
 
 
@@ -481,12 +475,11 @@ for step in range(n_iterations):
     ii = np.where(model_particles == -1)[0]
     
     for index in ii:
-        print(model_particles[index])
         model_particles[index][0] = 0 # send particle to 0 (starting point)
         event_particles = np.vstack((event_particles, model_particles[index]))
         e_events = e_events + 1
     
-    valid_vertices = move_model_particles(e_events, event_particles, valid_vertices)
+    valid_vertices = move_model_particles(e_events, event_particles, valid_vertices, model_particles, bed_particles)
     e_events_store[step] = e_events
     
     
