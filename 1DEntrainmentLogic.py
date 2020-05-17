@@ -164,34 +164,43 @@ def place_particle(g1, g2, p_diam):
     return p_x, p_diam, p_y
 
     
-def find_neighbours_of(idx, model_particles, bed_particles):
+def find_neighbours_of(particle_idx, model_particles, bed_particles):
     """ For a given vertex, return the two neighbouring grains of highest level """ 
 
-    # first, consider model particles:
-    # for a particle to be the left neighbour of idx, its center must be less than or equal to R away
-    # where R is the constant particle radius
-#    left_neighbour = np.where(model_particles[:,0] == idx - (parameters.set_diam / 2))
-#    print(left_neighbour)
-#    
-#    right_neighbour = np.where(model_particles[:,0] == idx + (parameters.set_diam / 2))
-#    print(right_neighbour)
-#
-#    # then look at bed particles:
-#    
-#    # TODO: Need to update function to consider model particles _as well as_ 
-#    # bed particles as possible contact neighbours when being entrained
-#    print(idx, idx - (parameters.set_diam / 2))
-#    grain_x_idx = np.where(bed_particles[:,2] == (idx - (parameters.set_diam / 2)))
-#    print(grain_x_idx)
-#    grain_x = bed_particles[grain_x_idx]
-#    
-    grain_x = bed_particles[idx]
-    grain_y = bed_particles[idx+1]
+    # look for particles with center R (radius) away from particle_idx 
+    left_neighbour_center = particle_idx - (parameters.set_diam / 2)
+    right_neighbour_center = particle_idx + (parameters.set_diam / 2)
     
-    g1 = grain_x
-    g2 = grain_y
+    # Look for left neighbour:
+    # first search model particles for matches
+    left_neighbour_idx = np.where(model_particles[:,0] == left_neighbour_center)
+    
+    # if no such model particle found, search bed particle array
+    if left_neighbour_idx[0].size == 0: 
+        left_neighbour_idx = np.where(bed_particles[:, 2] == left_neighbour_center)
+        if left_neighbour_idx[0].size == 0:
+            raise ValueError('No left neighbours found for _(idx).')
+        else:
+            left_neighbour = bed_particles[left_neighbour_idx]
+    else:
+        left_neighbour = model_particles[left_neighbour_idx]
+        
+    # Look for right neighbour:
+    # first search model particles for matches
+    right_neighbour_idx = np.where(model_particles[:,0] == right_neighbour_center)
+    
+    if right_neighbour_idx[0].size == 0:
+        right_neighbour_idx = np.where(bed_particles[:,2] == right_neighbour_center)
+        if right_neighbour_idx[0].size == 0:
+            raise ValueError('No right neighbours found for _(idx).')
+        else:
+            right_neighbour = bed_particles[right_neighbour_idx]
+    else:
+        right_neighbour = model_particles[right_neighbour_idx]
+
+    #TODO: assert/check that only one neighbour has been found
             
-    return g1, g2
+    return left_neighbour[0], right_neighbour[0]
 
 
 def set_model_particles(bed_vertices, bed_particles):
@@ -234,7 +243,7 @@ def set_model_particles(bed_vertices, bed_particles):
         ####
         
         # once a vertex is chosen, this function identifies the neighbours
-        g1, g2 = find_neighbours_of(random_idx, model_particles, bed_particles)
+        g1, g2 = find_neighbours_of(vertex, model_particles, bed_particles)
         # get the particles initial x, y and diameter information in the bed
         p_x, p_diam, p_y = place_particle(g1, g2, parameters.set_diam)
         
@@ -315,19 +324,6 @@ plot_stream(bed_particles, model_particles, radius_array, chosen_vertex, 150, 10
 ############################################################################### 
 #%% Model particles have been placed on the bed; stream build is complete.
 # Divide stream into sampling regions and build sampling array to store data
-bed_sampreg = 25
-# ------------------ below is WIP, pulled directly from Quasi2D:
-## Data storage arrays
-#Nu_out_Store = np.zeros([Bed_sampreg, Loops], dtype=int, order='F')#[0]
-## Bed sampling boundaries in the x-direction
-#BS_boundaries = (XCoordinates_Orig + (x_max / Bed_sampreg) *
-#                 np.arange(0, Bed_sampreg + 1, dtype=int))
-#SSamp_len = len(BS_boundaries)
-## Index to hold boundaries between subsampling regions to facilitate random
-## sampling from within each region.
-#SubSampl_idx = np.zeros([1, SSamp_len], dtype=int, order='F')
-#xB_idx = np.zeros([1, 2], dtype=int, order='F')
-#yB_idx = np.zeros([1, 2], dtype=int, order='F')
 
 ###############################################################################
 # number of model iterations  
@@ -396,6 +392,7 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
             verified_hop_placement[i] = verified_hop
             print("Particle " + str(int(event_particles[i,3])) + " being entrained from " + str(event_particles[i,0]) + " to " + str(verified_hop))
             # Need to check if particle is being placed between two particles here:
+            
 
             try:
                 # take nulled vertices without the reintroduced vertex
@@ -410,7 +407,7 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
         except StopIteration:
             # particle has looped around. Need to add it to the waiting list
             verified_hop_placement[i] = -1
-            print("Particle exceeded stream... sending to -1 axis as temporary fix") 
+            print("Particle exceeded stream... sending to -1 axis") 
 
 
     # update the x-location in rand_particles with the verified_hop 
@@ -464,9 +461,9 @@ for step in range(n_iterations):
         e_events = 1 #???
         
     # total number of entrained particles -- used later when bed regions implemented
-    e_grains = e_events * bed_sampreg
+    # e_grains = e_events * bed_sampreg
     # randomly select model particles to entrain per unit area of bed
-    event_particles = random.sample(model_particles, e_events)
+    event_particles = random.sample(list(model_particles), e_events)
     event_particles = np.array(event_particles)
     
     ''' for this loop, identify the particles at x=-1 and add them all to the
