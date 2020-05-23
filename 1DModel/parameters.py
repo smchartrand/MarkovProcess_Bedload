@@ -28,11 +28,23 @@ x_max = 500
 Grid_Spacing = 1
 
 # Minimum grain diameter in millimeters.
+# IF VARIABLE USE THESE:
 min_diam = 4.0
-
+max_diam = 6.0 
+# IF SET DIAM USE THIS:
 set_diam = 5.0
+set_radius = (set_diam / 2.0)
 
 # Size of largest grain relative to the cross-stream length.
 Size_Frac = 0.06
 
-max_diam = 6.0 
+
+
+# number of model iterations  
+n_iterations = 10
+lambda_1 = 1
+# Particle travel time minimum (t).
+T_pmin = 0
+# Particle travel time maximum (t).
+T_pmax = 1.0
+
