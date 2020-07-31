@@ -4,9 +4,8 @@ import parameters
 import numpy as np
 import random
 
-# FOR TESTING: 
-def pause():
-    programPause = raw_input("Press the <ENTER> key to continue...")
+
+
  
 ###############################################################################
     
@@ -15,12 +14,10 @@ bed_particles = np.zeros([max_particles, 4],dtype=float)
 
 bed_particles, bed_vertices = logic.build_streambed(bed_particles, parameters.set_diam)   
 
-
 ###############################################################################  
 
 model_particles, chosen_vertex, valid_vertices, nulled_vertices = logic.set_model_particles(bed_vertices, bed_particles)
 logic.plot_stream(bed_particles, model_particles, 150, 100/4, valid_vertices)
-
 ###############################################################################
 e_events_store = np.zeros(parameters.n_iterations)
 
@@ -46,22 +43,33 @@ for step in range(parameters.n_iterations):
     # total number of entrained particles -- used later when bed regions implemented
     # e_grains = e_events * bed_sampreg
     # randomly select model particles to entrain per unit area of bed
-    print(model_particles)
+    # print(model_particles)
     event_particles = random.sample(list(model_particles), e_events)
     event_particles = np.array(event_particles)
     
     ''' for this loop, identify the particles at x=-1 and add them all to the
     event_particles array '''
     # find all particles at x=-1 (particles in queue)
-    ii = np.where(model_particles == -1)[0]
-    
+    ii = np.where(model_particles[:,0] == -1)[0]
     for index in ii:
         model_particles[index][0] = 0 # send particle to 0 (starting point)
         event_particles = np.vstack((event_particles, model_particles[index]))
         e_events = e_events + 1
     
+    # remove any unactive particles from the event particles array
+    event_particles = event_particles[event_particles[:,4] == 1]
+    num_event_particles = np.shape(event_particles)[0]
+    if e_events != num_event_particles:
+        # 1. log that the # entrainment events has been altered
+        
+        # 2. update e_events
+        e_events = num_event_particles
+    
+    
+    print(f'x-locations of particles selected for entrainment: {event_particles[:,0]}')
     valid_vertices, nulled_vertices = logic.move_model_particles(e_events, event_particles, valid_vertices, model_particles, bed_particles, bed_vertices, nulled_vertices)
     e_events_store[step] = e_events
+
     
     
     

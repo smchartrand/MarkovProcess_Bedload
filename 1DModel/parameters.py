@@ -22,7 +22,7 @@ XCoordinates_Orig = 0
 Pack = 0.52
 
 # Length of the domain in the streamwise direction in millimeters.
-x_max = 500
+x_max = 150
 
 # Spacing of nodes in millimeters.
 Grid_Spacing = 1
@@ -41,7 +41,7 @@ Size_Frac = 0.06
 
 
 # number of model iterations  
-n_iterations = 10
+n_iterations = 50
 lambda_1 = 1
 # Particle travel time minimum (t).
 T_pmin = 0

@@ -12,10 +12,15 @@ from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle
 
+
+# FOR TESTING: 
+def pause():
+    programPause = input("Press the <ENTER> key to continue...")
+
 ############################################################################### 
 #%% Initial Packing of Streambed 
      
-def pack_bed(random_diam, bed_particles, particle_id, pack_idx):
+def add_bed_particle(random_diam, bed_particles, particle_id, pack_idx):
     """ This function will add a new particle to the bed_particle array
     that has random diameter, id=packing_idx, calculated center and elevation """
     
@@ -37,7 +42,7 @@ def build_streambed(bed_particles, diam):
     running_id = 0
     running_pack_idx = 0
     while True:
-        running_id, running_pack_idx = pack_bed(diam, bed_particles, running_id, running_pack_idx)
+        running_id, running_pack_idx = add_bed_particle(diam, bed_particles, running_id, running_pack_idx)
         if bed_complete(running_pack_idx):
             break
         else: continue
@@ -81,17 +86,25 @@ def determine_num_particles(pack_frac, num_vertices):
     return num_particles
 
 
-def place_particle(g1, g2, p_diam):
+def place_particle(placement_idx, particle_diam, model_particles, bed_particles):
     """ put function definition here """
     
+    #TODO: make sure 'find_neighbours' can never find itself
+    # find the two neighbours of the particle
+    left_neighbour, right_neighbour = find_neighbours_of(placement_idx, model_particles, bed_particles)
+   
     # initialize neighbour (g1 and g2) and placed particle information using info from the storage arrays
-    x1 = g1[0]
-    x2 = g2[0]
-    y1 = g1[2]
-    y2 = g2[2]
-    r1 = g1[1] / 2
-    r2 = g2[1] / 2
-    rp = p_diam / 2 
+    x1 = left_neighbour[0]
+    y1 = left_neighbour[2]
+    r1 = left_neighbour[1] / 2
+    
+    x2 = right_neighbour[0]
+    y2 = right_neighbour[2]
+    r2 = right_neighbour[1] / 2
+    
+    rp = particle_diam / 2 
+    
+    print(f'Calculating placement using elevations {y1} and {y2}')
     
     # define symbols for symbolic system solution using SymPy
     x3, y3 = sy.symbols('x3 y3')
@@ -106,8 +119,28 @@ def place_particle(g1, g2, p_diam):
     # iterate into the solution dictionary to recieve new particle center (x,y)
     p_x = (sol_dict[1][0])
     p_y = (sol_dict[1][1])
+    
+    # if neighbours elevation is above 0 (not a bed particle), set neighbour as 
+    # inactive to make sure they do not get selected for entrainment while 
+    # being below (supporting) the newly placed particle 
+    if left_neighbour[2] > 0:
+        lmodel_index = np.where(model_particles[:,3] == left_neighbour[3])
+        model_particles[lmodel_index] = set_activity(model_particles[lmodel_index][0], 0)
+        
+                 
+    if right_neighbour[2] > 0:
+        rmodel_index = np.where(model_particles[:,3] == right_neighbour[3])
+        model_particles[rmodel_index] = set_activity(model_particles[rmodel_index][0], 0)
  
-    return p_x, p_diam, p_y
+    return p_x, p_y
+
+
+def set_activity(particle, status):
+
+    particle[4] = status
+    
+    print(f'Particle {particle[3]} set to inactive')
+    return particle
 
     
 def find_neighbours_of(particle_idx, model_particles, bed_particles):
@@ -117,47 +150,51 @@ def find_neighbours_of(particle_idx, model_particles, bed_particles):
     left_neighbour_center = particle_idx - (parameters.set_diam / 2)
     right_neighbour_center = particle_idx + (parameters.set_diam / 2)
     
+    #TODO: assert/check that only one neighbour has been found
+    #     If multiple neighbours found this means a verticle stack has occured?
+    
     # Look for left neighbour:
     # first search model particles for matches
-    left_neighbour_idx = np.where(model_particles[:,0] == left_neighbour_center)
+    left_neighbour_idx_model = np.where(model_particles[:,0] == left_neighbour_center)
     
     # if no such model particle found, search bed particle array
-    if left_neighbour_idx[0].size == 0: 
-        left_neighbour_idx = np.where(bed_particles[:, 0] == left_neighbour_center)
-        if left_neighbour_idx[0].size == 0:
-            raise ValueError('No left neighbours found for _(idx).')
+    if left_neighbour_idx_model[0].size == 0: 
+        left_neighbour_idx_bed = np.where(bed_particles[:, 0] == left_neighbour_center)
+        if left_neighbour_idx_bed[0].size == 0:
+            # TODO: need to handle these errors - exit simulation?
+            raise ValueError('No left neighbours found for {__}')
         else:
-            left_neighbour = bed_particles[left_neighbour_idx]
-            print('bed l n')
+            left_neighbour = bed_particles[left_neighbour_idx_bed]
     else:
-        left_neighbour = model_particles[left_neighbour_idx]
-        print('model l n')
+        left_neighbour = model_particles[left_neighbour_idx_model]
+
         
     # Look for right neighbour:
     # first search model particles for matches
-    right_neighbour_idx = np.where(model_particles[:,0] == right_neighbour_center)
+    right_neighbour_idx_model = np.where(model_particles[:,0] == right_neighbour_center)
     
-    if right_neighbour_idx[0].size == 0:
-        right_neighbour_idx = np.where(bed_particles[:,0] == right_neighbour_center)
-        if right_neighbour_idx[0].size == 0:
-            raise ValueError('No right neighbours found for _(idx).')
+    if right_neighbour_idx_model[0].size == 0:
+        right_neighbour_idx_bed = np.where(bed_particles[:,0] == right_neighbour_center)
+        if right_neighbour_idx_bed[0].size == 0:
+            raise ValueError('No right neighbours found for {___}.')
         else:
-            right_neighbour = bed_particles[right_neighbour_idx]
+            right_neighbour = bed_particles[right_neighbour_idx_bed]
     else:
-        right_neighbour = model_particles[right_neighbour_idx]
+        right_neighbour = model_particles[right_neighbour_idx_model]  
+        
+    print(f'Event particle landing at {particle_idx} has l-neighbour {left_neighbour[0][0]} and r-neighbour {right_neighbour[0][0]}')
 
-    #TODO: assert/check that only one neighbour has been found
-            
     return left_neighbour[0], right_neighbour[0]
 
 
 def set_model_particles(bed_vertices, bed_particles):
     """ Randomly choose vertices from vertex_idx to place n particles. 
-    Returns n-4 array representing the resulting model particles where
+    Returns n-5 array representing the resulting model particles where
     [0] = center coordinate,
     [1] = diameter,
     [2] = elevation,
-    [3] = uid """
+    [3] = uid
+    [4] = active (boolean) """
 
     # create a boolean area representing the avaliability of the vertices
     num_vertices = np.size(bed_vertices)
@@ -165,8 +202,12 @@ def set_model_particles(bed_vertices, bed_particles):
     
     # determine the number of model particles that should be introduced into the stream bed
     num_particles = determine_num_particles(parameters.Pack, num_vertices)
+    
+    ### FOR TESTING - REMOVE LINE BELOW AND UNCOMMENT ABOVE LINE BEFORE SUBMITTING
+    # num_particles = np.size(bed_vertices) - 1
+    
     # create an empty n-4 array to store model particle information
-    model_particles = np.zeros([num_particles, 4], dtype='float')
+    model_particles = np.zeros([num_particles, 5], dtype='float')
     
     #### FOR TESTING:
     chosen_vertex = np.zeros(num_particles)
@@ -189,22 +230,21 @@ def set_model_particles(bed_vertices, bed_particles):
         #### FOR TESTING: 
         chosen_vertex[particle] = vertex
         ####
-        
-        # once a vertex is chosen, this function identifies the neighbours
-        g1, g2 = find_neighbours_of(vertex, model_particles, bed_particles)
-        # get the particles initial x, y and diameter information in the bed
-        p_x, p_diam, p_y = place_particle(g1, g2, parameters.set_diam)
+  
+        # place particle at the chosen vertex
+        p_x, p_y = place_particle(vertex, parameters.set_diam, model_particles, bed_particles)
         
         # intialize the particle information
         model_particles[particle][0] = p_x
+        model_particles[particle][1] = parameters.set_diam
         model_particles[particle][2] = p_y
-        model_particles[particle][1] = p_diam
         model_particles[particle][3] = particle # id number for each particle
+        model_particles[particle][4] = 1 # each particle begins as an active particle
         
         nulled_vertices[particle] = vertex
         # store each particles vertex information in new_vertices
-        new_vertices[particle][0] = (p_x) - (p_diam/2)
-        new_vertices[particle][1] = (p_x) + (p_diam/2)
+        new_vertices[particle][0] = (p_x) - (parameters.set_diam/2)
+        new_vertices[particle][1] = (p_x) + (parameters.set_diam/2)
         
     # flatten both vertex arrays so that they can be merged together by insort()
     new_vertices = new_vertices.flatten()
@@ -213,6 +253,7 @@ def set_model_particles(bed_vertices, bed_particles):
     valid_vertices = compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices)
     
     return model_particles, chosen_vertex, valid_vertices, nulled_vertices
+
 
 # from: https://stackoverflow.com/questions/12427146/combine-two-arrays-and-sort
 def insort(a, b, kind='mergesort'):
@@ -280,8 +321,9 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
     unverified_hop = event_particles[:,0] + L_x_init
     particles_self_vertices = event_particles[:,0] + event_particles[:,1]/2
     reintroduced_vertices = event_particles[:,0]
-    # find the closest valid vertex to unverified_hop location 
-    verified_hop_placement = np.zeros(e_events)
+    # create empty arrays to hold the new values
+    new_x_values = np.zeros(e_events)
+    new_y_values = np.zeros(e_events)
     
     '''
     This loop will iterate over each proposed hop distance in unverified_hop[]
@@ -300,7 +342,7 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
     '''
     for i, _ in enumerate(unverified_hop[0]): 
 #        valid_without_self = [x for x in valid_vertices if x not in particles_self_vertices]
-        try:    
+        try: 
             # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
             # iterate over the valid vertex set and identify the closest vertex equal to or greater than  unverified_hop
             verified_hop = next(x[1] for x in enumerate(valid_vertices) if np.any(x[1] >= unverified_hop[0][i]))
@@ -310,31 +352,33 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
                 print("Caught self placement at " + str(particles_self_vertices[i]) + " ... returning particle to original vertex")
                 verified_hop = event_particles[i,0]
                 
-            verified_hop_placement[i] = verified_hop
+            
             print("Particle " + str(int(event_particles[i,3])) + " being entrained from " + str(event_particles[i,0]) + " to " + str(verified_hop))
-            # Need to check if particle is being placed between two particles here:
-            # update the x-location in rand_particles with the verified_hop
-            left_neighbour, right_neighbour = find_neighbours_of(verified_hop, model_particles, bed_particles)
+            
             # get the particles initial x, y and diameter information in the bed
-            p_x, p_diam, p_y = place_particle(left_neighbour, right_neighbour, parameters.set_diam)
-
-            try:
-                # take nulled vertices without the reintroduced vertex
-                nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
-                # append the newly occupied vertex to nulled vertices
-                nulled_vertices = np.append(nulled_vertices, verified_hop)
-            except ValueError:
-                print("verified_hop value not in np array")
-            except AttributeError:
-                print(AttributeError)         
+            new_x, new_y = place_particle(verified_hop, parameters.set_diam, model_particles, bed_particles)
+            
+            new_x_values[i] = new_x
+            new_y_values[i] = new_y
+            
+            # Delete the newly claimed vertex from the valid vertices set so that
+            # and remaining particles in this iteration cannot select it
+            valid_vertices = valid_vertices[valid_vertices != verified_hop]
+            # take nulled vertices without the reintroduced vertex
+            nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
+            # append the newly occupied vertex to nulled vertices
+            nulled_vertices = np.append(nulled_vertices, verified_hop)       
         
         except StopIteration:
             # particle has looped around. Need to add it to the waiting list
-            verified_hop_placement[i] = -1
+            new_x_values[i] = -1
             print("Particle exceeded stream... sending to -1 axis") 
+            nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
+            
 
 
-    event_particles[:,0] = verified_hop_placement
+    event_particles[:,0] = new_x_values
+    event_particles[:,2] = new_y_values
     
 
     
@@ -344,17 +388,17 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
     
     # create empty n-2 array to hold the vertices of the model particles
     new_vertices = np.zeros((np.size(model_particles[:,0]),2))
-    # for each model particle, store what would be its new vertex values in new_vertices
+    # for each in-stream model particle, store what would be its new vertex values in new_vertices
     for idx, particle in enumerate(model_particles):
-        new_vertices[idx][0] = particle[0] - particle[1]/2 # left vertex
-        new_vertices[idx][1] = particle[0] + particle[1]/2 # right vertex
+        new_vertices[idx][0] = particle[0] - parameters.set_radius # left vertex
+        new_vertices[idx][1] = particle[0] + parameters.set_radius # right vertex
         
     new_vertices = new_vertices.flatten()
     bed_vertices = bed_vertices.flatten()
     
     # flatten both vertex arrays so that we can merge them together 
     valid_vertices = compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices)   
-   
+    
     ## FOR TESTING:
     # sleep to more easily see the bed migration in matplotlib
     time.sleep(1)
@@ -362,9 +406,6 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
     
     plot_stream(bed_particles, model_particles, 150, 100/4, valid_vertices)
     return valid_vertices, nulled_vertices
-
-
-
 
 
 def plot_stream(bed_particles, model_particles, x_lim, y_lim, valid_vertices):
@@ -380,7 +421,7 @@ def plot_stream(bed_particles, model_particles, x_lim, y_lim, valid_vertices):
     ax.set_ylim((0, y_lim))
     
     radius_array = np.asarray((bed_particles[:,1] / 2.0), dtype=float)
-    x_center = (bed_particles[:,0] + bed_particles[:,1]) - radius_array
+    x_center = bed_particles[:,0]
     y_center_bed = np.zeros(np.size(x_center))
     plt.rcParams['image.cmap'] = 'gray'
     ## This method of plotting circles comes from Stack Overflow questions\32444037
