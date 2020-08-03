@@ -20,17 +20,17 @@ def pause():
 ############################################################################### 
 #%% Initial Packing of Streambed 
      
-def add_bed_particle(random_diam, bed_particles, particle_id, pack_idx):
+def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
     """ This function will add a new particle to the bed_particle array
-    that has random diameter, id=packing_idx, calculated center and elevation """
+    that has a diameter, id=packing_idx, calculated center and elevation """
     
-    center = pack_idx + (random_diam/2)
+    center = pack_idx + (diam/2)
 
     elevation = 0
-    bed_particles[particle_id] = [center, random_diam, elevation, pack_idx]
+    bed_particles[particle_id] = [center, diam, elevation, pack_idx]
   
     # update build parameters
-    pack_idx += random_diam
+    pack_idx += diam
     particle_id += 1
  
     return particle_id, pack_idx
@@ -55,11 +55,11 @@ def build_streambed(bed_particles, diam):
     bed_particles = bed_particles[~valid]
     
     # create array of bed_vertices based on bed_particles array
-    avaliable_vertices = np.zeros(x_max, dtype=bool)
+    bed_vertices = np.zeros(x_max, dtype=bool)
 
-    avaliable_vertices[bed_particles[1:,3].astype(int)] = 1
+    bed_vertices[bed_particles[1:,3].astype(int)] = 1
     # x-indexes of avaliable vertices to place model particles at
-    bed_vertices = np.transpose(np.nonzero(avaliable_vertices))
+    bed_vertices = np.transpose(np.nonzero(bed_vertices))
 
     return bed_particles, bed_vertices
 
@@ -74,7 +74,6 @@ def bed_complete(pack_idx):
 
 #%% Bed is built. Place/create n particles in avaliable vertices
 ##### NOTE: plot_stream SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
-    
 
 def determine_num_particles(pack_frac, num_vertices):
     """ Return the number of particles to introduce into model. Choice is based
@@ -120,26 +119,50 @@ def place_particle(placement_idx, particle_diam, model_particles, bed_particles)
     p_x = (sol_dict[1][0])
     p_y = (sol_dict[1][1])
     
-    # if neighbours elevation is above 0 (not a bed particle), set neighbour as 
-    # inactive to make sure they do not get selected for entrainment while 
-    # being below (supporting) the newly placed particle 
-    if left_neighbour[2] > 0:
-        lmodel_index = np.where(model_particles[:,3] == left_neighbour[3])
-        model_particles[lmodel_index] = set_activity(model_particles[lmodel_index][0], 0)
-        
-                 
-    if right_neighbour[2] > 0:
-        rmodel_index = np.where(model_particles[:,3] == right_neighbour[3])
-        model_particles[rmodel_index] = set_activity(model_particles[rmodel_index][0], 0)
  
     return p_x, p_y
 
+'''
+Set all model particle states to active, then iterate over
+each particle in model particle array and check if being supported 
+by other model particle(s). 
 
-def set_activity(particle, status):
+    If yes, set those supporting particles' state to inactive. 
+    If no, do nothing.
+    
+Note: bed particles are not considered current since they are always inactive.
+'''
+def update_particle_states(model_particles, bed_particles):
+    
+    for particle in model_particles:
+        # set particle state to active (1)
+        set_state(particle, 1)
+        
+    in_stream_particles = model_particles[model_particles[:,0] != -1]
+    for particle in in_stream_particles:
+        
+        left_neighbour, right_neighbour = find_neighbours_of(particle[0], model_particles, bed_particles)
+        # note: this method below could be improved if find_neighbours_of 
+        # would indicate if a neighbour belongs to the model or bed particles
+        if left_neighbour[2] > 0 and left_neighbour[2] < particle[2]:
+            lmodel_index = np.where(model_particles[:,3] == left_neighbour[3])
+            model_particles[lmodel_index] = set_state(model_particles[lmodel_index][0], 0)
+        else:
+            continue
+                 
+        if right_neighbour[2] > 0 and right_neighbour[2] < particle[2]:
+            rmodel_index = np.where(model_particles[:,3] == right_neighbour[3])
+            model_particles[rmodel_index] = set_state(model_particles[rmodel_index][0], 0)
+        else:
+            continue
+    
+    return model_particles
+        
+
+def set_state(particle, status):
 
     particle[4] = status
-    
-    print(f'Particle {particle[3]} set to inactive')
+    print(f'Particle {particle[3]} set to {status} (1=active, 0=inactive)')
     return particle
 
     
@@ -239,7 +262,7 @@ def set_model_particles(bed_vertices, bed_particles):
         model_particles[particle][1] = parameters.set_diam
         model_particles[particle][2] = p_y
         model_particles[particle][3] = particle # id number for each particle
-        model_particles[particle][4] = 1 # each particle begins as an active particle
+        model_particles[particle][4] = 1 # each particle begins as active
         
         nulled_vertices[particle] = vertex
         # store each particles vertex information in new_vertices
@@ -250,9 +273,12 @@ def set_model_particles(bed_vertices, bed_particles):
     new_vertices = new_vertices.flatten()
     bed_vertices = bed_vertices.flatten()
         
-    valid_vertices = compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices)
+    available_vertices = compute_available_vertices(bed_vertices, new_vertices, nulled_vertices)
     
-    return model_particles, chosen_vertex, valid_vertices, nulled_vertices
+    # update particle states so that supporting particles are inactive
+    model_particles = update_particle_states(model_particles, bed_particles)
+    
+    return model_particles, chosen_vertex, available_vertices, nulled_vertices
 
 
 # from: https://stackoverflow.com/questions/12427146/combine-two-arrays-and-sort
@@ -266,7 +292,7 @@ def insort(a, b, kind='mergesort'):
 
 
 '''
-compute_valid_vertices::method
+compute_available_vertices::method
 
 This method computes the valid vertex set. Funciton is given NumPy arrays of the 
 bed vertices, newly introduced vertices and nulled vertices.
@@ -282,13 +308,12 @@ two new possible vertices.
 
 Nulled vertices are those vertices which are currently occupied by a particle.
 '''
-def compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices):
-    valid_vertices = copy.deepcopy(bed_vertices)
+def compute_available_vertices(bed_vertices, new_vertices, nulled_vertices):
+    available_vertices = copy.deepcopy(bed_vertices)
     
     # nulled set is the shared elements between nulled_vertes and bed_vertices
     nulled_bed_set = set(nulled_vertices)&set(bed_vertices)
-    valid_vertices = list(set(bed_vertices)-nulled_bed_set)
-
+    available_vertices = list(set(bed_vertices)-nulled_bed_set)
 
     element_count = collections.Counter(new_vertices)
     valid_new_vertices = [item for item in element_count if element_count[item]>1]
@@ -296,15 +321,14 @@ def compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices):
     nulled_new_set = set(nulled_vertices)&set(valid_new_vertices)
     valid_new_vertices = list(set(valid_new_vertices)-nulled_new_set)
 
-#    valid_vertices = valid_vertices.append(valid_new_vertices)
-    valid_vertices = insort(valid_vertices, valid_new_vertices)
-    return valid_vertices
+    available_vertices = insort(available_vertices, valid_new_vertices)
+    return available_vertices
 
 # TODO: Need to move n particles (n = e_events) per subregion, not from whole stream
 ''' 
 This needs a description.
 '''
-def move_model_particles(e_events, event_particles, valid_vertices, model_particles, bed_particles, bed_vertices, nulled_vertices):
+def move_model_particles(e_events, event_particles, available_vertices, model_particles, bed_particles, bed_vertices, nulled_vertices):
 
     T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, e_events).
                  reshape(1, e_events))
@@ -334,18 +358,18 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
     
     If we want to take away a particles self vertices from the simulation then 
     simple uncomment the valid_without_self initialization and replace the 
-    enumeration of valid_vertices with valid_without_self. This will force a 
+    enumeration of available_vertices with valid_without_self. This will force a 
     particle to be pushed to the next avaliable vartex instead of falling back 
     into it's original vartex (i.e as if it was never entrained at all). If this
     way is implemented, one can also comment out the verification loop which
     checks 'if verified_hop == particles_self_vertices[i]' as it is not necessary
     '''
     for i, _ in enumerate(unverified_hop[0]): 
-#        valid_without_self = [x for x in valid_vertices if x not in particles_self_vertices]
+#        valid_without_self = [x for x in available_vertices if x not in particles_self_vertices]
         try: 
             # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
             # iterate over the valid vertex set and identify the closest vertex equal to or greater than  unverified_hop
-            verified_hop = next(x[1] for x in enumerate(valid_vertices) if np.any(x[1] >= unverified_hop[0][i]))
+            verified_hop = next(x[1] for x in enumerate(available_vertices) if np.any(x[1] >= unverified_hop[0][i]))
             
             # check that the verified hop distances is not equal to a particles self_vertex (being placed at it's own vertex)
             if verified_hop == particles_self_vertices[i]:
@@ -361,10 +385,11 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
             new_x_values[i] = new_x
             new_y_values[i] = new_y
             
-            # Delete the newly claimed vertex from the valid vertices set so that
-            # and remaining particles in this iteration cannot select it
-            valid_vertices = valid_vertices[valid_vertices != verified_hop]
-            # take nulled vertices without the reintroduced vertex
+            # Delete newly claimed vertex, new_x, from the valid vertices set
+            # This ensures next particles cannot select the claimed vertex during current entrainment event
+            available_vertices = available_vertices[available_vertices != verified_hop]
+            
+            # Update nulled vertex 
             nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
             # append the newly occupied vertex to nulled vertices
             nulled_vertices = np.append(nulled_vertices, verified_hop)       
@@ -373,16 +398,17 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
             # particle has looped around. Need to add it to the waiting list
             new_x_values[i] = -1
             print("Particle exceeded stream... sending to -1 axis") 
-            nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
             
-
-
+            nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
+            # update supporting particles state to active
+            
+    
+    # update the x and y positions of the event particles
     event_particles[:,0] = new_x_values
     event_particles[:,2] = new_y_values
     
-
     
-    # now, update model_particle array with new x_location for each of the randomly selected particles
+    # now, update model_particle array with the final event particle information
     for idx, particle_id in enumerate(event_particles[:,3]):
         model_particles[int(particle_id)] = event_particles[idx]
     
@@ -397,18 +423,21 @@ def move_model_particles(e_events, event_particles, valid_vertices, model_partic
     bed_vertices = bed_vertices.flatten()
     
     # flatten both vertex arrays so that we can merge them together 
-    valid_vertices = compute_valid_vertices(bed_vertices, new_vertices, nulled_vertices)   
+    available_vertices = compute_available_vertices(bed_vertices, new_vertices, nulled_vertices)  
+    
+    # update particle states so that supporting particles are inactive
+    model_particles = update_particle_states(model_particles, bed_particles)
     
     ## FOR TESTING:
     # sleep to more easily see the bed migration in matplotlib
     time.sleep(1)
     ###
     
-    plot_stream(bed_particles, model_particles, 150, 100/4, valid_vertices)
-    return valid_vertices, nulled_vertices
+    plot_stream(bed_particles, model_particles, 150, 100/4, available_vertices)
+    return available_vertices, nulled_vertices
 
-
-def plot_stream(bed_particles, model_particles, x_lim, y_lim, valid_vertices):
+# Taken from original model
+def plot_stream(bed_particles, model_particles, x_lim, y_lim, available_vertices):
     """ Plot the complete stream from 0,0 to x_lim and y_lim. Bed particles 
     are plotted as light grey and model particles are dark blue. Allows
     for closer look at state of a subregion of the stream during simulation """
@@ -445,7 +474,7 @@ def plot_stream(bed_particles, model_particles, x_lim, y_lim, valid_vertices):
     # uncomment for loop sections to draw the corresponding lines on figure
 #    for xc in vertex_idx:
 #        plt.axvline(x=xc, color='b', linestyle='-')
-    for xxc in valid_vertices:
+    for xxc in available_vertices:
         plt.axvline(x=xxc, color='m', linestyle='-')
 ##    for green in chosen_vertex:
 #        plt.axvline(x=green, color='g', linestyle='-')

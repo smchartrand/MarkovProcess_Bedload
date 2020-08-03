@@ -47,9 +47,8 @@ for step in range(parameters.n_iterations):
     event_particles = random.sample(list(model_particles), e_events)
     event_particles = np.array(event_particles)
     
-    ''' for this loop, identify the particles at x=-1 and add them all to the
-    event_particles array '''
-    # find all particles at x=-1 (particles in queue)
+    # identify particles at x=-1 and add them all to the event particles array
+    # note: particles at x=-1 are those particles in 'queue'
     ii = np.where(model_particles[:,0] == -1)[0]
     for index in ii:
         model_particles[index][0] = 0 # send particle to 0 (starting point)
@@ -59,6 +58,8 @@ for step in range(parameters.n_iterations):
     # remove any unactive particles from the event particles array
     event_particles = event_particles[event_particles[:,4] == 1]
     num_event_particles = np.shape(event_particles)[0]
+    
+    # 
     if e_events != num_event_particles:
         # 1. log that the # entrainment events has been altered
         
