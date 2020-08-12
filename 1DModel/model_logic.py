@@ -103,7 +103,7 @@ def place_particle(placement_idx, particle_diam, model_particles, bed_particles)
     
     rp = particle_diam / 2 
     
-    print(f'Calculating placement using elevations {y1} and {y2}')
+    #print(f'Calculating placement using elevations {y1} and {y2}')
     
     # define symbols for symbolic system solution using SymPy
     x3, y3 = sy.symbols('x3 y3')
@@ -162,7 +162,7 @@ def update_particle_states(model_particles, bed_particles):
 def set_state(particle, status):
 
     particle[4] = status
-    print(f'Particle {particle[3]} set to {status} (1=active, 0=inactive)')
+    #print(f'Particle {particle[3]} set to {status} (1=active, 0=inactive)')
     return particle
 
     
@@ -185,7 +185,7 @@ def find_neighbours_of(particle_idx, model_particles, bed_particles):
         left_neighbour_idx_bed = np.where(bed_particles[:, 0] == left_neighbour_center)
         if left_neighbour_idx_bed[0].size == 0:
             # TODO: need to handle these errors - exit simulation?
-            raise ValueError('No left neighbours found for {__}')
+            raise ValueError(f'No left neighbours found for location {particle_idx}')
         else:
             left_neighbour = bed_particles[left_neighbour_idx_bed]
     else:
@@ -199,13 +199,13 @@ def find_neighbours_of(particle_idx, model_particles, bed_particles):
     if right_neighbour_idx_model[0].size == 0:
         right_neighbour_idx_bed = np.where(bed_particles[:,0] == right_neighbour_center)
         if right_neighbour_idx_bed[0].size == 0:
-            raise ValueError('No right neighbours found for {___}.')
+            raise ValueError(f'No right neighbours found for location {particle_idx}')
         else:
             right_neighbour = bed_particles[right_neighbour_idx_bed]
     else:
         right_neighbour = model_particles[right_neighbour_idx_model]  
         
-    print(f'Event particle landing at {particle_idx} has l-neighbour {left_neighbour[0][0]} and r-neighbour {right_neighbour[0][0]}')
+    # print(f'Event particle landing at {particle_idx} has l-neighbour {left_neighbour[0][0]} and r-neighbour {right_neighbour[0][0]}')
 
     return left_neighbour[0], right_neighbour[0]
 
@@ -392,38 +392,40 @@ def move_model_particles(e_events, event_particles, available_vertices, model_pa
             # Update nulled vertex 
             nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
             # append the newly occupied vertex to nulled vertices
-            nulled_vertices = np.append(nulled_vertices, verified_hop)       
+            nulled_vertices = np.append(nulled_vertices, verified_hop)  
+            side_vertices = np.zeros((1,2))
+            side_vertices[0][0] = new_x - parameters.set_radius # left vertex
+            side_vertices[0][1] = new_x + parameters.set_radius
+            
+            side_vertices = side_vertices.flatten()
+            bed_vertices = bed_vertices.flatten()
+            
+            available_vertices = compute_available_vertices(bed_vertices, side_vertices, nulled_vertices)
         
         except StopIteration:
             # particle has looped around. Need to add it to the waiting list
             new_x_values[i] = -1
             print("Particle exceeded stream... sending to -1 axis") 
             
-            nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
+            nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]]
+            side_vertices = np.zeros((1,2))
+            side_vertices[0][0] = -1 - parameters.set_radius # left vertex
+            side_vertices[0][1] = -1 + parameters.set_radius
+            
+            side_vertices = side_vertices.flatten()
+            bed_vertices = bed_vertices.flatten()
+    
+            available_vertices = compute_available_vertices(bed_vertices, side_vertices, nulled_vertices)
             # update supporting particles state to active
             
     
     # update the x and y positions of the event particles
     event_particles[:,0] = new_x_values
     event_particles[:,2] = new_y_values
-    
-    
+        
     # now, update model_particle array with the final event particle information
     for idx, particle_id in enumerate(event_particles[:,3]):
         model_particles[int(particle_id)] = event_particles[idx]
-    
-    # create empty n-2 array to hold the vertices of the model particles
-    new_vertices = np.zeros((np.size(model_particles[:,0]),2))
-    # for each in-stream model particle, store what would be its new vertex values in new_vertices
-    for idx, particle in enumerate(model_particles):
-        new_vertices[idx][0] = particle[0] - parameters.set_radius # left vertex
-        new_vertices[idx][1] = particle[0] + parameters.set_radius # right vertex
-        
-    new_vertices = new_vertices.flatten()
-    bed_vertices = bed_vertices.flatten()
-    
-    # flatten both vertex arrays so that we can merge them together 
-    available_vertices = compute_available_vertices(bed_vertices, new_vertices, nulled_vertices)  
     
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
@@ -433,7 +435,7 @@ def move_model_particles(e_events, event_particles, available_vertices, model_pa
     time.sleep(1)
     ###
     
-    plot_stream(bed_particles, model_particles, 150, 100/4, available_vertices)
+    plot_stream(bed_particles, model_particles, 250, 100/4, available_vertices)
     return available_vertices, nulled_vertices
 
 # Taken from original model

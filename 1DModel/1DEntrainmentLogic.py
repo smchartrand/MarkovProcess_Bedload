@@ -1,5 +1,4 @@
 import model_logic as logic
-import math
 import parameters
 import numpy as np
 import random
@@ -9,15 +8,14 @@ import random
  
 ###############################################################################
     
-max_particles = int(math.ceil( parameters.x_max / parameters.min_diam ))
-bed_particles = np.zeros([max_particles, 4],dtype=float)
+bed_particles = np.zeros([parameters.max_particles, 4],dtype=float)
 
 bed_particles, bed_vertices = logic.build_streambed(bed_particles, parameters.set_diam)   
 
 ###############################################################################  
 
-model_particles, chosen_vertex, valid_vertices, nulled_vertices = logic.set_model_particles(bed_vertices, bed_particles)
-logic.plot_stream(bed_particles, model_particles, 150, 100/4, valid_vertices)
+model_particles, chosen_vertex, available_vertices, nulled_vertices = logic.set_model_particles(bed_vertices, bed_particles)
+logic.plot_stream(bed_particles, model_particles, 250, 100/4, available_vertices)
 ###############################################################################
 e_events_store = np.zeros(parameters.n_iterations)
 
@@ -44,7 +42,12 @@ for step in range(parameters.n_iterations):
     # e_grains = e_events * bed_sampreg
     # randomly select model particles to entrain per unit area of bed
     # print(model_particles)
-    event_particles = random.sample(list(model_particles), e_events)
+    in_stream_particles = model_particles[model_particles[:,0] != -1]
+    active_particles =  in_stream_particles[in_stream_particles[:,4] != 0]
+    
+    event_particles = random.sample(list(active_particles), e_events)
+    #TODO: catch when size(active_particles) < e_events
+    
     event_particles = np.array(event_particles)
     
     # identify particles at x=-1 and add them all to the event particles array
@@ -55,8 +58,6 @@ for step in range(parameters.n_iterations):
         event_particles = np.vstack((event_particles, model_particles[index]))
         e_events = e_events + 1
     
-    # remove any unactive particles from the event particles array
-    event_particles = event_particles[event_particles[:,4] == 1]
     num_event_particles = np.shape(event_particles)[0]
     
     # 
@@ -68,7 +69,7 @@ for step in range(parameters.n_iterations):
     
     
     print(f'x-locations of particles selected for entrainment: {event_particles[:,0]}')
-    valid_vertices, nulled_vertices = logic.move_model_particles(e_events, event_particles, valid_vertices, model_particles, bed_particles, bed_vertices, nulled_vertices)
+    available_vertices, nulled_vertices = logic.move_model_particles(e_events, event_particles, available_vertices, model_particles, bed_particles, bed_vertices, nulled_vertices)
     e_events_store[step] = e_events
 
     
