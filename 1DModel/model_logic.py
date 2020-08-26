@@ -311,7 +311,7 @@ Nulled vertices are those vertices which are currently occupied by a particle.
 def compute_available_vertices(bed_vertices, new_vertices, nulled_vertices):
     available_vertices = copy.deepcopy(bed_vertices)
     
-    # nulled set is the shared elements between nulled_vertes and bed_vertices
+    # nulled bed set is the shared elements between nulled_vertes and bed_vertices
     nulled_bed_set = set(nulled_vertices)&set(bed_vertices)
     available_vertices = list(set(bed_vertices)-nulled_bed_set)
 
@@ -320,8 +320,11 @@ def compute_available_vertices(bed_vertices, new_vertices, nulled_vertices):
     
     nulled_new_set = set(nulled_vertices)&set(valid_new_vertices)
     valid_new_vertices = list(set(valid_new_vertices)-nulled_new_set)
+    
+    
 
     available_vertices = insort(available_vertices, valid_new_vertices)
+    
     return available_vertices
 
 # TODO: Need to move n particles (n = e_events) per subregion, not from whole stream
@@ -342,12 +345,12 @@ def move_model_particles(e_events, event_particles, available_vertices, model_pa
     L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
     
     # update the particle information to be original_x + hop distance
-    unverified_hop = event_particles[:,0] + L_x_init
+    unver_e_particles = event_particles.copy()
+    
+    unverified_hops = event_particles[:,0] + L_x_init
+    unver_e_particles[:,0] = unverified_hops 
+    
     particles_self_vertices = event_particles[:,0] + event_particles[:,1]/2
-    reintroduced_vertices = event_particles[:,0]
-    # create empty arrays to hold the new values
-    new_x_values = np.zeros(e_events)
-    new_y_values = np.zeros(e_events)
     
     '''
     This loop will iterate over each proposed hop distance in unverified_hop[]
@@ -364,68 +367,77 @@ def move_model_particles(e_events, event_particles, available_vertices, model_pa
     way is implemented, one can also comment out the verification loop which
     checks 'if verified_hop == particles_self_vertices[i]' as it is not necessary
     '''
-    for i, _ in enumerate(unverified_hop[0]): 
+    for i, particle_i in enumerate(unver_e_particles): 
 #        valid_without_self = [x for x in available_vertices if x not in particles_self_vertices]
         try: 
             # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
             # iterate over the valid vertex set and identify the closest vertex equal to or greater than  unverified_hop
-            verified_hop = next(x[1] for x in enumerate(available_vertices) if np.any(x[1] >= unverified_hop[0][i]))
+            verified_hop = next(x[1] for x in enumerate(available_vertices) if np.any(x[1] >= particle_i[0]))
             
-            # check that the verified hop distances is not equal to a particles self_vertex (being placed at it's own vertex)
+            # check if verified hop is equal to the particle's self_vertex 
             if verified_hop == particles_self_vertices[i]:
                 print("Caught self placement at " + str(particles_self_vertices[i]) + " ... returning particle to original vertex")
                 verified_hop = event_particles[i,0]
+            else:
+                # else, remove the original x location from nulled vertices
+                # since the hop has been verified and it is now avaliable again
+                nulled_vertices = nulled_vertices[nulled_vertices != event_particles[i,0]]
+                nulled_vertices = np.append(nulled_vertices, verified_hop)
                 
-            
+                
             print("Particle " + str(int(event_particles[i,3])) + " being entrained from " + str(event_particles[i,0]) + " to " + str(verified_hop))
-            
+
             # get the particles initial x, y and diameter information in the bed
             new_x, new_y = place_particle(verified_hop, parameters.set_diam, model_particles, bed_particles)
+
+            particle_i[0] = new_x
+            particle_i[2] = new_y
+            model_particles[int(particle_i[3])] = particle_i
             
-            new_x_values[i] = new_x
-            new_y_values[i] = new_y
-            
-            # Delete newly claimed vertex, new_x, from the valid vertices set
-            # This ensures next particles cannot select the claimed vertex during current entrainment event
-            available_vertices = available_vertices[available_vertices != verified_hop]
-            
-            # Update nulled vertex 
-            nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]] 
             # append the newly occupied vertex to nulled vertices
-            nulled_vertices = np.append(nulled_vertices, verified_hop)  
-            side_vertices = np.zeros((1,2))
-            side_vertices[0][0] = new_x - parameters.set_radius # left vertex
-            side_vertices[0][1] = new_x + parameters.set_radius
             
-            side_vertices = side_vertices.flatten()
+            # for each in-stream model particle, store what would be its new vertex values in new_vertices
+            
+            cp_model_particles = model_particles.copy()
+            cp_model_particles = cp_model_particles[cp_model_particles[:,0] != 0]
+            cp_model_particles = cp_model_particles[cp_model_particles[:,0] != -1]
+                       
+            # create empty n-2 array to hold the vertices of the model particles
+            new_vertices = np.zeros((np.size(cp_model_particles[:,0]),2))
+            
+            for idx, particle in enumerate(cp_model_particles):
+                new_vertices[idx][0] = particle[0] - parameters.set_radius # left vertex
+                new_vertices[idx][1] = particle[0] + parameters.set_radius # right vertex
+                
+            new_vertices = new_vertices.flatten()
             bed_vertices = bed_vertices.flatten()
             
-            available_vertices = compute_available_vertices(bed_vertices, side_vertices, nulled_vertices)
+            available_vertices = compute_available_vertices(bed_vertices, new_vertices, nulled_vertices)
         
         except StopIteration:
-            # particle has looped around. Need to add it to the waiting list
-            new_x_values[i] = -1
             print("Particle exceeded stream... sending to -1 axis") 
+            nulled_vertices = nulled_vertices[nulled_vertices != event_particles[i,0]]
+            new_x = -1
+            particle_i[0] = new_x
+            model_particles[int(particle_i[3])] = particle_i
             
-            nulled_vertices = nulled_vertices[nulled_vertices != reintroduced_vertices[i]]
-            side_vertices = np.zeros((1,2))
-            side_vertices[0][0] = -1 - parameters.set_radius # left vertex
-            side_vertices[0][1] = -1 + parameters.set_radius
             
-            side_vertices = side_vertices.flatten()
+            # for each in-stream model particle, store what would be its new vertex values in new_vertices
+            cp_model_particles = model_particles.copy()
+            cp_model_particles = cp_model_particles[cp_model_particles[:,0] != 0]
+            cp_model_particles = cp_model_particles[cp_model_particles[:,0] != -1]
+            
+            # create empty n-2 array to hold the vertices of the model particles
+            new_vertices = np.zeros((np.size(cp_model_particles[:,0]),2))
+            
+            for idx, particle in enumerate(cp_model_particles):
+                new_vertices[idx][0] = particle[0] - parameters.set_radius # left vertex
+                new_vertices[idx][1] = particle[0] + parameters.set_radius # right vertex
+            
+            new_vertices = new_vertices.flatten()
             bed_vertices = bed_vertices.flatten()
     
-            available_vertices = compute_available_vertices(bed_vertices, side_vertices, nulled_vertices)
-            # update supporting particles state to active
-            
-    
-    # update the x and y positions of the event particles
-    event_particles[:,0] = new_x_values
-    event_particles[:,2] = new_y_values
-        
-    # now, update model_particle array with the final event particle information
-    for idx, particle_id in enumerate(event_particles[:,3]):
-        model_particles[int(particle_id)] = event_particles[idx]
+            available_vertices = compute_available_vertices(bed_vertices, new_vertices, nulled_vertices) 
     
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
