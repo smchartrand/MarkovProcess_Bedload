@@ -310,16 +310,42 @@ Nulled vertices are those vertices which are currently occupied by a particle.
 '''
 def compute_available_vertices(bed_vertices, new_vertices, nulled_vertices):
     available_vertices = copy.deepcopy(bed_vertices)
+    print(new_vertices)
+    # remove any nulled vertices that occur an even amounts in nulled_vertices
+    # i.e [5, 10, 15, 25, 25, 10, 15, 10, 30] ->[5, 10, 10, 10, 30]
+#    even_odd_count = np.zeros(parameters.x_max)
+#    for vertex in nulled_vertices:
+#        even_odd_count[vertex] += 1
     
-    # nulled bed set is the shared elements between nulled_vertes and bed_vertices
+#    odd_nulled_vertices = np.where(even_odd_count % 2 == 0)
+
+    
+    # grab the shared elements between nulled_vertices and bed_vertices
     nulled_bed_set = set(nulled_vertices)&set(bed_vertices)
     available_vertices = list(set(bed_vertices)-nulled_bed_set)
 
     element_count = collections.Counter(new_vertices)
-    valid_new_vertices = [item for item in element_count if element_count[item]>1]
+    avaliable_by_touch = [item for item in element_count if element_count[item]>1]
     
-    nulled_new_set = set(nulled_vertices)&set(valid_new_vertices)
-    valid_new_vertices = list(set(valid_new_vertices)-nulled_new_set)
+    print(f'Abt: {avaliable_by_touch}')
+    
+    count = collections.Counter(nulled_vertices)
+    for vertex in avaliable_by_touch:
+        occr = count[float(vertex)]
+        if occr != 0 and (occr % 2) == 0:
+            print(f'Vertex {vertex} occured odd number of times in nulled_vertices')
+            nulled_vertices = nulled_vertices[nulled_vertices != float(vertex)]
+            
+    for vertex in bed_vertices:
+        occr = count[float(vertex)]
+        if occr != 0 and (occr % 2) != 0:
+            print(f'Vertex {vertex} occured odd number of times in nulled_vertices')
+            nulled_vertices = nulled_vertices[nulled_vertices != float(vertex)]
+            
+    print(f'Nv: {nulled_vertices}')
+    nulled_new_set = set(nulled_vertices)&set(avaliable_by_touch)
+
+    valid_new_vertices = list(set(avaliable_by_touch)-nulled_new_set)
     
     
 
