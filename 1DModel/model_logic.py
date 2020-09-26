@@ -21,8 +21,20 @@ def pause():
 #%% Initial Packing of Streambed 
      
 def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
-    """ This function will add a new particle to the bed_particle array
-    that has a diameter, id=packing_idx, calculated center and elevation """
+    """ Add 'particle' to the bed particle list.
+    
+    
+    
+    Calculates center and elevation of particle 
+    from input. Maintains pack_idx and particle_id 
+    for next particle iteration.
+    
+    Keyword arguments:
+    diam -- diameter of the pa
+    bed_particles -- current list of bed particles
+    particle_id -- index into bed_particles list
+    pack_idx -- left-most extent of particle
+    """
     
     center = pack_idx + (diam/2)
 
@@ -37,8 +49,21 @@ def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
 
 
 def build_streambed(bed_particles, diam):
-    """ Build streambed until packed. Return n-4 array of particle diameter 
-    starting idx, x coord and y coord. Array index = particle id """
+    """ Build the bed particle list until 'packed'.
+    
+    
+    
+    Handles calls to add_bed_particle, checks for 
+    completness of bed and updates the x-extent
+    of stream when the packing exceeds/under packs 
+    within 8mm range.
+    
+    Note: the updates to x-extent are only required 
+    when variable particle diameter is being used. 
+    
+    Returns complete bed_particles list and list of 
+    vertices derived from bed_particles 
+    """
     running_id = 0
     running_pack_idx = 0
     while True:
@@ -65,8 +90,7 @@ def build_streambed(bed_particles, diam):
 
 
 def bed_complete(pack_idx):
-    """ Provided a packing index (current # of particles placed in bed), this 
-    function will return a Boolean indicating whether the bed packing is complete """ 
+    """Check to see if bed is complete based on model params.""" 
     # similarly, if np.count_nonzero(bed_space) == x_max
     if pack_idx >= parameters.x_max:
         return 1
@@ -76,17 +100,35 @@ def bed_complete(pack_idx):
 ##### NOTE: plot_stream SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
 
 def determine_num_particles(pack_frac, num_vertices):
-    """ Return the number of particles to introduce into model. Choice is based
-    on the packing fraction and number of avaliable vertices """
+    """ Return the number of model particles to be used in model."""
     
-    num_particles = num_vertices * pack_frac
-    num_particles = int(math.ceil(num_particles))
+#    num_particles = num_vertices * pack_frac
+#    num_particles = int(math.ceil(num_particles))
+    num_particles = num_vertices - 1
 
     return num_particles
 
 
 def place_particle(placement_idx, particle_diam, model_particles, bed_particles):
-    """ put function definition here """
+    """ Calculate new X and Y of particle based on location in stream.
+    
+    
+    
+    Provided a particle's (pA) location (xA) in stream, 
+    search for 2 neighbouring particles (n1, n2) that pA might
+    come into contact with when placed at xA. 
+    
+    Calculate the Y and X position of pA
+    with a system of equations that uses
+    the position of n1 and n2.
+    
+    Keyword arguments:
+    placement_idx -- considered particles locaiton (pA)
+    particle_diam -- diameter of considered particle
+    model_particles -- model particle list
+    bed_particles -- bed particle list
+    
+    """
     
     #TODO: make sure 'find_neighbours' can never find itself
     # find the two neighbours of the particle
@@ -122,17 +164,30 @@ def place_particle(placement_idx, particle_diam, model_particles, bed_particles)
  
     return p_x, p_y
 
-'''
-Set all model particle states to active, then iterate over
-each particle in model particle array and check if being supported 
-by other model particle(s). 
 
-    If yes, set those supporting particles' state to inactive. 
-    If no, do nothing.
-    
-Note: bed particles are not considered current since they are always inactive.
-'''
 def update_particle_states(model_particles, bed_particles):
+    """ Set each model particle state according 'active' rules.
+    
+    
+    
+    If any model particle (pX) has a particle 
+    resting on it in the stream then pX must 
+    be set to Inactive indicated by a boolean 0 
+    in its model particle list slot.
+    
+    If pX does not have any particles resting
+    on it then it is considered Active 
+    indicated by a boolean 1.
+    
+    Note: bed particles are always considered
+    Inactive in the model.
+    
+    
+    Keyword arguments:ß
+    model_particles -- model particle list
+    bed_particles -- bed particle list
+    
+    """
     
     for particle in model_particles:
         # set particle state to active (1)
@@ -160,18 +215,31 @@ def update_particle_states(model_particles, bed_particles):
         
 
 def set_state(particle, status):
-
+    """ Set particle state to desired status."""
     particle[4] = status
     #print(f'Particle {particle[3]} set to {status} (1=active, 0=inactive)')
     return particle
 
     
 def find_neighbours_of(particle_idx, model_particles, bed_particles):
-    """ For a given vertex, return the two neighbouring grains of highest level """ 
+    """ Find the 2 neighbouring (left, right) particles of particle_idx.
+    
+    
+    A particle's center must be within +/- radius of
+    particle_idx to be considered a neighbour of 
+    particle_idx. Of those particles that qualify, only
+    the two with the greatest elevations (Y) will be taken.
+    
+    Keyword arguments:
+        
+    particle_idx -- the x-location considered for neighbours
+    model_particles -- model particle list
+    bed_particles -- bed particle list
+    """ 
 
     # look for particles with center R (radius) away from particle_idx 
-    left_neighbour_center = particle_idx - (parameters.set_diam / 2)
-    right_neighbour_center = particle_idx + (parameters.set_diam / 2)
+    left_neighbour_center = particle_idx - (parameters.set_radius)
+    right_neighbour_center = particle_idx + (parameters.set_radius)
     
     #TODO: assert/check that only one neighbour has been found
     #     If multiple neighbours found this means a verticle stack has occured?
@@ -209,15 +277,33 @@ def find_neighbours_of(particle_idx, model_particles, bed_particles):
 
     return left_neighbour[0], right_neighbour[0]
 
-
+##TODO: extract into create and set functions
 def set_model_particles(bed_vertices, bed_particles):
-    """ Randomly choose vertices from vertex_idx to place n particles. 
-    Returns n-5 array representing the resulting model particles where
-    [0] = center coordinate,
-    [1] = diameter,
-    [2] = elevation,
-    [3] = uid
-    [4] = active (boolean) """
+    """ Create model particle list and situate in model stream.
+    
+    
+    
+    Create list of n model particles based 
+    the packing fraction.
+    
+    Randomly assign avaliable x-vertices 
+    to each model particle. Avaliable
+    vertices are derived from the list of
+    bed particles. 
+    
+    The structure of a resulting particle:
+        [0] = center coordinate,
+        [1] = diameter,
+        [2] = elevation,
+        [3] = uid,
+        [4] = active (boolean)
+    
+    
+    Keyword arguments:
+    bed_vertices -- list of vertices based on bed particles
+    bed_particles -- bed particle list
+    
+     """
 
     # create a boolean area representing the avaliability of the vertices
     num_vertices = np.size(bed_vertices)
@@ -308,56 +394,75 @@ two new possible vertices.
 
 Nulled vertices are those vertices which are currently occupied by a particle.
 '''
-def compute_available_vertices(bed_vertices, new_vertices, nulled_vertices):
-    available_vertices = copy.deepcopy(bed_vertices)
-    print(new_vertices)
-    # remove any nulled vertices that occur an even amounts in nulled_vertices
-    # i.e [5, 10, 15, 25, 25, 10, 15, 10, 30] ->[5, 10, 10, 10, 30]
-#    even_odd_count = np.zeros(parameters.x_max)
-#    for vertex in nulled_vertices:
-#        even_odd_count[vertex] += 1
+def compute_available_vertices(bed_vertices, side_vertices, nulled_vertices):
+    """ Compute the avaliable vertices in the model stream.
+
     
-#    odd_nulled_vertices = np.where(even_odd_count % 2 == 0)
+    Keyword arguments:
+    
+    bed_vertices -- list of vertices introduced by bed particles
+    side_vertices -- list of vertices introduced by the L/R 
+                        extent of model particles
+    nulled_vertices -- list of vertices that have been occupied    
+
+    """
+    #TODO: .... just remove the nulled vertex
+    
+    available_vertices = copy.deepcopy(bed_vertices)
 
     
     # grab the shared elements between nulled_vertices and bed_vertices
     nulled_bed_set = set(nulled_vertices)&set(bed_vertices)
-    available_vertices = list(set(bed_vertices)-nulled_bed_set)
+    available_bed_vertices = list(set(bed_vertices)-nulled_bed_set)
 
-    element_count = collections.Counter(new_vertices)
+    element_count = collections.Counter(side_vertices)
     avaliable_by_touch = [item for item in element_count if element_count[item]>1]
     
-    print(f'Abt: {avaliable_by_touch}')
-    
-    count = collections.Counter(nulled_vertices)
-    for vertex in avaliable_by_touch:
-        occr = count[float(vertex)]
-        if occr != 0 and (occr % 2) == 0:
-            print(f'Vertex {vertex} occured odd number of times in nulled_vertices')
-            nulled_vertices = nulled_vertices[nulled_vertices != float(vertex)]
-            
-    for vertex in bed_vertices:
-        occr = count[float(vertex)]
-        if occr != 0 and (occr % 2) != 0:
-            print(f'Vertex {vertex} occured odd number of times in nulled_vertices')
-            nulled_vertices = nulled_vertices[nulled_vertices != float(vertex)]
-            
-    print(f'Nv: {nulled_vertices}')
+#    total_nulled = nulled_bed_set.union(set(nulled_vertices))
+#    count = collections.Counter(total_nulled)
+#    for vertex in avaliable_by_touch:
+#        occr = count[float(vertex)]
+#        if occr != 0 and (occr % 2) == 0:
+#            #print(f'Vertex {vertex} occured even number of times in nulled_vertices')
+#            nulled_vertices = nulled_vertices[nulled_vertices != float(vertex)]
+#            
+#    for vertex in bed_vertices:
+#        occr = count[float(vertex)]
+#        if occr != 0 and (occr % 2) != 0:
+#            #print(f'Vertex {vertex} occured odd number of times in nulled_vertices')
+#            nulled_vertices = nulled_vertices[nulled_vertices != float(vertex)]
+    print(f'NV: {nulled_vertices}\n')
+    print(f'SV: {side_vertices}\n')
+    print(f'ABT: {avaliable_by_touch}')      
     nulled_new_set = set(nulled_vertices)&set(avaliable_by_touch)
 
-    valid_new_vertices = list(set(avaliable_by_touch)-nulled_new_set)
+    valid_new_vertices = list((set(avaliable_by_touch)-nulled_new_set))
     
     
 
-    available_vertices = insort(available_vertices, valid_new_vertices)
+    available_vertices = insort(available_bed_vertices, valid_new_vertices)
     
     return available_vertices
 
 # TODO: Need to move n particles (n = e_events) per subregion, not from whole stream
-''' 
-This needs a description.
-'''
 def move_model_particles(e_events, event_particles, available_vertices, model_particles, bed_particles, bed_vertices, nulled_vertices):
+    """ Move selected model particles for entrainment.
+    
+    
+    
+    Calculate jump distances for each particle and place 
+    where stream vertices allow. 
+    
+    Keyword arguments:
+    e_events -- the number of entrainment events to occur
+    event_particles -- the particles selected for entrainment
+    avaliable_vertices -- list of avaliable vertices
+    model_particles -- list of model particles
+    bed_particles -- list of bed particles
+    bed_vertices -- list of bed vertices
+    nulled_vertices -- list of currently nulled vertices
+    
+    """
 
     T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, e_events).
                  reshape(1, e_events))
