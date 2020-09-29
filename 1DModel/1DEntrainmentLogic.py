@@ -37,7 +37,7 @@ for step in range(parameters.n_iterations):
 
     if e_events == 0:
         e_events = 1 #???
-        
+          
     # total number of entrained particles -- used later when bed regions implemented
     # e_grains = e_events * bed_sampreg
     # randomly select model particles to entrain per unit area of bed
@@ -45,20 +45,18 @@ for step in range(parameters.n_iterations):
     in_stream_particles = model_particles[model_particles[:,0] != -1]
     active_particles =  in_stream_particles[in_stream_particles[:,4] != 0]
     
-    event_particles = random.sample(list(active_particles), e_events)
-    #TODO: catch when size(active_particles) < e_events
-    
-    event_particles = np.array(event_particles)
+    # randomly sample particles from model_particles to entrain
+    idx_of_entrainment = random.sample(range(len(active_particles)), e_events)
     
     # identify particles at x=-1 and add them all to the event particles array
     # note: particles at x=-1 are those particles in 'queue'
     ii = np.where(model_particles[:,0] == -1)[0]
     for index in ii:
         model_particles[index][0] = 0 # send particle to 0 (starting point)
-        event_particles = np.vstack((event_particles, model_particles[index]))
+        idx_of_entrainment = np.append(index)
         e_events = e_events + 1
     
-    num_event_particles = np.shape(event_particles)[0]
+    num_event_particles = len(idx_of_entrainment)
     
     # 
     if e_events != num_event_particles:
@@ -68,8 +66,8 @@ for step in range(parameters.n_iterations):
         e_events = num_event_particles
     
     
-    print(f'x-locations of particles selected for entrainment: {event_particles[:,0]}')
-    available_vertices, nulled_vertices = logic.move_model_particles(e_events, event_particles, available_vertices, model_particles, bed_particles, bed_vertices, nulled_vertices)
+    print(f'particles selected for entrainment: {idx_of_entrainment}')
+    available_vertices, nulled_vertices = logic.move_model_particles(e_events, idx_of_entrainment, model_particles, bed_particles, bed_vertices, nulled_vertices)
     e_events_store[step] = e_events
 
     
