@@ -29,6 +29,13 @@ def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
     from input. Maintains pack_idx and particle_id 
     for next particle iteration.
     
+    Builds particle of the following structure:
+        [0] = center coordinate,
+        [1] = diameter,
+        [2] = elevation,
+        [3] = uid,
+        [4] = active (boolean)
+    
     Keyword arguments:
     diam -- diameter of the pa
     bed_particles -- current list of bed particles
@@ -37,9 +44,10 @@ def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
     """
     
     center = pack_idx + (diam/2)
+    state = 0
 
     elevation = 0
-    bed_particles[particle_id] = [center, diam, elevation, pack_idx]
+    bed_particles[particle_id] = [center, diam, elevation, pack_idx, state]
   
     # update build parameters
     pack_idx += diam
@@ -367,7 +375,7 @@ def set_model_particles(bed_vertices, bed_particles):
     new_vertices = new_vertices.flatten()
     bed_vertices = bed_vertices.flatten()
         
-    available_vertices = compute_available_vertices(bed_vertices, model_particles, nulled_vertices)
+    available_vertices = compute_available_vertices(model_particles, bed_particles)
     
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
@@ -385,7 +393,7 @@ def insort(a, b, kind='mergesort'):
     return c[flag]
 
 
-def compute_available_vertices(bed_vertices, model_particles, nulled_vertices):
+def compute_available_vertices(model_particles, bed_particles):
     """ Compute the avaliable vertices in the model stream.
 
     
@@ -397,77 +405,58 @@ def compute_available_vertices(bed_vertices, model_particles, nulled_vertices):
     nulled_vertices -- list of vertices that have been occupied    
 
     """
-    #TODO: .... just remove the nulled vertex
+    nulled_vertices = []
+    avail_vertices = []
     
-    cp_model_particles = model_particles.copy()
-    no0_model_particles = cp_model_particles[cp_model_particles[:,0] != 0]
-    fn_model_particles = no0_model_particles[no0_model_particles[:,0] != -1]
-            
-    # create empty n-2 array to hold the vertices of the model particles
-    new_vertices = np.zeros((np.size(fn_model_particles[:,0]),2))
-            
-    for idx, particle in enumerate(fn_model_particles):
-        new_vertices[idx][0] = particle[0] - parameters.set_radius # left vertex
-        new_vertices[idx][1] = particle[0] + parameters.set_radius # right vertex
+    all_particles = np.concatenate((model_particles, bed_particles), axis=0)
     
-    new_vertices = new_vertices.flatten()
-    bed_vertices = bed_vertices.flatten()
-
+    elevations = np.unique(all_particles[:,2])
+    # sort elevation in descending order
+    # https://stackoverflow.com/questions/26984414/
+    elevations[::-1].sort()
     
-
-    # grab the shared elements between nulled_vertices and bed_vertices
-    nulled_bed_set = set(nulled_vertices)&set(bed_vertices)
-    available_bed_vertices = list(set(bed_vertices)-nulled_bed_set)
-
-    element_count = collections.Counter(new_vertices)
-    avaliable_by_touch = [item for item in element_count if element_count[item]>1]
-    
-#    total_nulled = nulled_bed_set.union(set(nulled_vertices))
-#    count = collections.Counter(total_nulled)
-#    for vertex in avaliable_by_touch:
-#        occr = count[float(vertex)]
-#        if occr != 0 and (occr % 2) == 0:
-#            #print(f'Vertex {vertex} occured even number of times in nulled_vertices')
-#            nulled_vertices = nulled_vertices[nulled_vertices != float(vertex)]
-#            
-#    for vertex in bed_vertices:
-#        occr = count[float(vertex)]
-#        if occr != 0 and (occr % 2) != 0:
-#            #print(f'Vertex {vertex} occured odd number of times in nulled_vertices')
-#            nulled_vertices = nulled_vertices[nulled_vertices != float(vertex)]    
-    nulled_new_set = set(nulled_vertices)&set(avaliable_by_touch)
-
-    valid_new_vertices = list((set(avaliable_by_touch)-nulled_new_set))
-    
-    
-
-    available_vertices = insort(available_bed_vertices, valid_new_vertices)
+    for elevation in elevations:
+        tmp_particles = all_particles[all_particles[:,2] == elevation]
+        
+        for particle in tmp_particles:    
+            nulled_vertices.append(particle[0])
+        
+        right_vertices = tmp_particles[:,0] + parameters.set_radius
+        left_vertices = tmp_particles[:,0] - parameters.set_radius
+        tmp_shared_vertices = np.intersect1d(left_vertices, right_vertices)
+        
+        for vertex in tmp_shared_vertices:
+            if vertex not in nulled_vertices:
+                avail_vertices.append(vertex)
+                
+        del(tmp_shared_vertices)
+        del(tmp_particles)
+        
+    available_vertices = np.array(avail_vertices)
     
     return available_vertices
 
 
-def lift_event_particles(idx_of_entrainment, model_particles, bed_vertices, 
-                         nulled_vertices):
+def lift_event_particles(idx_of_entrainment, model_particles, 
+                         available_vertices):
     """ 
     Lift all particles selected for entrainment and recalculate vertices.
     """
-    print(f'nulled before lift: {nulled_vertices}')
+    print(f'Available before lift: {available_vertices}')
     # release all x locations of the entrainment particles
+    # TODO: Make this NumPy-y (No For loop)
     for entrainment in idx_of_entrainment:
         particle = model_particles[entrainment]
-        nulled_vertices = nulled_vertices[nulled_vertices != particle[0]]
-    
-    print(f'Nulled after lift: {nulled_vertices}')
-    # calculate avaliable vertices as if event particles don't exist
-    avaliable_vertices = compute_available_vertices(bed_vertices, 
-                                                    model_particles, 
-                                                    nulled_vertices)
-        
-    return avaliable_vertices, bed_vertices, nulled_vertices
+        print(f'Lifting particle from: {particle[0]}')
+        available_vertices = available_vertices[available_vertices != particle[0]]
+
+    print(f'Available after lift: {available_vertices}')
+    pause()
+    return available_vertices
 
 # TODO: Need to move n particles (n = e_events) per subregion, not from whole stream
 def move_model_particles(e_events, idx_of_entrainment, model_particles, 
-                         bed_particles, bed_vertices, nulled_vertices):
+                         bed_particles, available_vertices):
     """ Move selected model particles for entrainment.
     
     
@@ -504,9 +493,9 @@ def move_model_particles(e_events, idx_of_entrainment, model_particles,
     # the output to map the entrained particles to the 2D grid.
     L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
     
-    available_vertices, bed_vertices, nulled_vertices = lift_event_particles(
-            idx_of_entrainment, model_particles, bed_vertices, nulled_vertices)
-    
+    available_vertices = lift_event_particles(idx_of_entrainment, 
+                                              model_particles,
+                                              available_vertices)
     
 # TODO: Update comment for this section    
     for entrainment in idx_of_entrainment: 
@@ -540,8 +529,9 @@ def move_model_particles(e_events, idx_of_entrainment, model_particles,
     time.sleep(1)
     ###
     
+    available_vertices = compute_available_vertices(model_particles, bed_particles)
     plot_stream(bed_particles, model_particles, 250, 100/4, available_vertices)
-    return available_vertices, nulled_vertices
+    return available_vertices
 
 
 # Taken from original model

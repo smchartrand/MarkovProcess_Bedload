@@ -8,7 +8,7 @@ import random
  
 ###############################################################################
     
-bed_particles = np.zeros([parameters.max_particles, 4],dtype=float)
+bed_particles = np.zeros([parameters.max_particles, 5],dtype=float)
 
 bed_particles, bed_vertices = logic.build_streambed(bed_particles, parameters.set_diam)   
 
@@ -66,8 +66,10 @@ for step in range(parameters.n_iterations):
         e_events = num_event_particles
     
     
+    available_vertices = logic.compute_available_vertices(model_particles, bed_particles)
+    
     print(f'particles selected for entrainment: {idx_of_entrainment}')
-    available_vertices, nulled_vertices = logic.move_model_particles(e_events, idx_of_entrainment, model_particles, bed_particles, bed_vertices, nulled_vertices)
+    available_vertices = logic.move_model_particles(e_events, idx_of_entrainment, model_particles, bed_particles, available_vertices)
     e_events_store[step] = e_events
 
     
