@@ -393,9 +393,11 @@ def insort(a, b, kind='mergesort'):
     return c[flag]
 
 
-def compute_available_vertices(model_particles, bed_particles):
+def compute_available_vertices(model_particles, bed_particles, lifted=False,
+                               lifted_particles=None):
     """ Compute the avaliable vertices in the model stream.
 
+    #TODO: update desc to outline the logic of computation
     
     Keyword arguments:
     
@@ -408,7 +410,16 @@ def compute_available_vertices(model_particles, bed_particles):
     nulled_vertices = []
     avail_vertices = []
     
-    all_particles = np.concatenate((model_particles, bed_particles), axis=0)
+    if lifted == True:
+        model_particles_lifted = copy.deepcopy(model_particles)
+        model_particles_lifted = model_particles_lifted[
+            ~np.isin(model_particles_lifted, lifted_particles)]
+        
+        all_particles = np.concatenate((model_particles_lifted, 
+                                        bed_particles), axis=0)
+    else:    
+        all_particles = np.concatenate((model_particles, 
+                                        bed_particles), axis=0)
     
     elevations = np.unique(all_particles[:,2])
     # sort elevation in descending order
