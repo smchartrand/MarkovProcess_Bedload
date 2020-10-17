@@ -13,9 +13,74 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle
 
 
+
 # FOR TESTING: 
 def pause():
     programPause = input("Press the <ENTER> key to continue...")
+    
+    
+class Model():
+    
+    ITERATION_TEMPLATE = ('''\n
+    --------------------- Iteration {step} ---------------------\n
+    # of entrainment events: {e_events}\n
+    Particles to be entrained: {particles}\n                          
+    ''')
+    
+    def __init__(self, bed_particles, model_particles, e_events_store):
+        self.bed_particles = bed_particles
+        self.model_particles = model_particles
+        self.e_events_store = e_events_store
+    
+    def run(self):        
+        for step in range(parameters.n_iterations):
+            # Calculate the number of entrainment events per-unit-area
+            e_events = np.random.poisson(parameters.lambda_1, None)
+            if e_events == 0:
+                e_events = 1 #???
+                  
+            # e_events = e_events * bed_sampreg
+            in_stream_particles = self.model_particles[
+                                    self.model_particles[:,0] != -1]
+            active_particles =  in_stream_particles[
+                                    in_stream_particles[:,4] != 0]
+            
+            id_of_event_particles = []
+            if e_events > len(active_particles):
+                e_events = len(active_particles)
+            random_sample = random.sample(range(len(active_particles)), 
+                                          e_events)
+            for index in random_sample:
+                id_of_event_particles.append(int(active_particles[index][3])  )
+            
+            ii = np.where(self.model_particles[:,0] == -1)[0]
+            for index in ii:
+                # send particle to 0 (starting point)
+                self.model_particles[index][0] = 0 
+                id_of_event_particles.append(index)
+                e_events = e_events + 1
+            
+            num_event_particles = len(id_of_event_particles) 
+            if e_events != num_event_particles:
+                # 1. log that the # entrainment events has been altered
+                
+                # 2. update e_events
+                e_events = num_event_particles
+            
+            available_vertices = compute_available_vertices(self.model_particles, 
+                                                            self.bed_particles)
+            print(self.ITERATION_TEMPLATE.format(
+                                        step=step, 
+                                        e_events=e_events, 
+                                        particles=id_of_event_particles))
+            self.e_events_store[step] = e_events
+            
+            available_vertices = move_model_particles(e_events, 
+                                                      id_of_event_particles, 
+                                                      self.model_particles, 
+                                                      self.bed_particles)
+            
+
 
 ############################################################################### 
 #%% Initial Packing of Streambed 
@@ -56,9 +121,8 @@ def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
     return particle_id, pack_idx
 
 
-def build_streambed(bed_particles, diam):
-    """ Build the bed particle list until 'packed'.
-    
+def build_streambed():
+    """ Build the bed particle list.
     
     
     Handles calls to add_bed_particle, checks for 
@@ -69,13 +133,17 @@ def build_streambed(bed_particles, diam):
     Note: the updates to x-extent are only required 
     when variable particle diameter is being used. 
     
-    Returns complete bed_particles list and list of 
-    vertices derived from bed_particles 
+    Return values:
+    bed_particles -- list of bed particles
+    bed_vertices -- list of available vertices 
+                    based on bed list 
     """
+    bed_particles = np.zeros([parameters.max_particles, 5],dtype=float)
+    
     running_id = 0
     running_pack_idx = 0
     while True:
-        running_id, running_pack_idx = add_bed_particle(diam, 
+        running_id, running_pack_idx = add_bed_particle(parameters.set_diam, 
                                                         bed_particles, 
                                                         running_id, 
                                                         running_pack_idx)
@@ -204,7 +272,7 @@ def update_particle_states(model_particles, bed_particles):
     """
     
     for particle in model_particles:
-        # set particle state to active (1)
+        #TODO: enumerate this somehow
         set_state(particle, 1)
         
     in_stream_particles = model_particles[model_particles[:,0] != -1]
@@ -237,8 +305,8 @@ def set_state(particle, status):
     return particle
 
     
-def find_neighbours_of(particle_idx, model_particles, bed_particles):
-    """ Find the 2 neighbouring (left, right) particles of particle_idx.
+def find_neighbours_of(particle_x, model_particles, bed_particles):
+    """ Find the 2 neighbouring bottom (left, right) particles of particle_idx.
     
     
     A particle's center must be within +/- radius of
@@ -254,8 +322,8 @@ def find_neighbours_of(particle_idx, model_particles, bed_particles):
     """ 
 
     # look for particles with center R (radius) away from particle_idx 
-    left_neighbour_center = particle_idx - (parameters.set_radius)
-    right_neighbour_center = particle_idx + (parameters.set_radius)
+    left_neighbour_center = particle_x - (parameters.set_radius)
+    right_neighbour_center = particle_x + (parameters.set_radius)
     
     #TODO: assert/check that only one neighbour has been found
     #     If multiple neighbours found this means a verticle stack has occured?
@@ -264,12 +332,14 @@ def find_neighbours_of(particle_idx, model_particles, bed_particles):
     # first search model particles for matches
     left_neighbour_idx_model = np.where(model_particles[:,0] == left_neighbour_center)
     
+    
     # if no such model particle found, search bed particle array
     if left_neighbour_idx_model[0].size == 0: 
         left_neighbour_idx_bed = np.where(bed_particles[:, 0] == left_neighbour_center)
+
         if left_neighbour_idx_bed[0].size == 0:
             # TODO: need to handle these errors - exit simulation?
-            raise ValueError(f'No left neighbours found for location {particle_idx}')
+            raise ValueError(f'No left neighbours found for location {particle_x}')
         else:
             left_neighbour = bed_particles[left_neighbour_idx_bed]
     else:
@@ -283,7 +353,7 @@ def find_neighbours_of(particle_idx, model_particles, bed_particles):
     if right_neighbour_idx_model[0].size == 0:
         right_neighbour_idx_bed = np.where(bed_particles[:,0] == right_neighbour_center)
         if right_neighbour_idx_bed[0].size == 0:
-            raise ValueError(f'No right neighbours found for location {particle_idx}')
+            raise ValueError(f'No right neighbours found for location {particle_x}')
         else:
             right_neighbour = bed_particles[right_neighbour_idx_bed]
     else:
@@ -380,7 +450,7 @@ def set_model_particles(bed_vertices, bed_particles):
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
     
-    return model_particles, chosen_vertex, available_vertices, nulled_vertices
+    return model_particles, available_vertices
 
 
 # from: https://stackoverflow.com/questions/12427146/combine-two-arrays-and-sort
@@ -397,23 +467,24 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
                                lifted_particles=None):
     """ Compute the avaliable vertices in the model stream.
 
-    #TODO: update desc to outline the logic of computation
+    #TODO: update desc and keyword to outline the logic of computation
     
     Keyword arguments:
     
-    bed_vertices -- list of vertices introduced by bed particles
-    side_vertices -- list of vertices introduced by the L/R 
-                        extent of model particles
-    nulled_vertices -- list of vertices that have been occupied    
-
+    model_particles    -- list of model particles
+    bed_particles      -- list of bed particles
+    lifted             -- boolean flag indicating if calculation should 
+                        take into account particles 'lifed' from the bed
+    lifted_particles   -- idx of the 'lifted' particles
     """
     nulled_vertices = []
     avail_vertices = []
     
     if lifted == True:
         model_particles_lifted = copy.deepcopy(model_particles)
-        model_particles_lifted = model_particles_lifted[
-            ~np.isin(model_particles_lifted, lifted_particles)]
+        
+        model_particles_lifted = np.delete(model_particles_lifted, 
+                                           lifted_particles, 0)
         
         all_particles = np.concatenate((model_particles_lifted, 
                                         bed_particles), axis=0)
@@ -448,26 +519,9 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     return available_vertices
 
 
-def lift_event_particles(idx_of_entrainment, model_particles, 
-                         available_vertices):
-    """ 
-    Lift all particles selected for entrainment and recalculate vertices.
-    """
-    print(f'Available before lift: {available_vertices}')
-    # release all x locations of the entrainment particles
-    # TODO: Make this NumPy-y (No For loop)
-    for entrainment in idx_of_entrainment:
-        particle = model_particles[entrainment]
-        print(f'Lifting particle from: {particle[0]}')
-        available_vertices = available_vertices[available_vertices != particle[0]]
-
-    print(f'Available after lift: {available_vertices}')
-    pause()
-    return available_vertices
-
 # TODO: Need to move n particles (n = e_events) per subregion, not from whole stream
-def move_model_particles(e_events, idx_of_entrainment, model_particles, 
-                         bed_particles, available_vertices):
+def move_model_particles(e_events, idx_of_event_particles, model_particles, 
+                         bed_particles):
     """ Move selected model particles for entrainment.
     
     
@@ -492,9 +546,9 @@ def move_model_particles(e_events, idx_of_entrainment, model_particles,
     bed_vertices -- list of bed vertices
     nulled_vertices -- list of currently nulled vertices
     """
-
     T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, 
                                    e_events).reshape(1, e_events))
+    
     # https:\\stackoverflow.com\questions\2106503\
     # Now distribute the random variables over a pseudo exponential
     # distribution based on inverse transform sampling.
@@ -504,12 +558,14 @@ def move_model_particles(e_events, idx_of_entrainment, model_particles,
     # the output to map the entrained particles to the 2D grid.
     L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
     
-    available_vertices = lift_event_particles(idx_of_entrainment, 
-                                              model_particles,
-                                              available_vertices)
-    
+    # compute the avaliable vertices with event particles 'lifted'
+    available_vertices = compute_available_vertices(model_particles,
+                                                     bed_particles, 
+                                                     True,
+                                                     idx_of_event_particles)
+    plot_stream(bed_particles, model_particles, 200, 100/4, available_vertices)
 # TODO: Update comment for this section    
-    for entrainment in idx_of_entrainment: 
+    for entrainment in idx_of_event_particles: 
         
         particle = model_particles[entrainment]
         unverified_hop = particle[0] + L_x_init 
@@ -517,9 +573,10 @@ def move_model_particles(e_events, idx_of_entrainment, model_particles,
             # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
             # iterate over the valid vertex set and identify the closest vertex equal to or greater than  unverified_hop
             verified_hop = next(x[1] for x in enumerate(available_vertices) if np.any(x[1] >= unverified_hop))
-                
+            
             print("Particle " + str(int(particle[3])) + " being entrained from " + str(particle[0]) + " to " + str(verified_hop))
-
+            
+            available_vertices = available_vertices[available_vertices != verified_hop]
             # get the particles initial x, y and diameter information in the bed
             new_x, new_y = place_particle(verified_hop, parameters.set_diam, model_particles, bed_particles)
             particle[0] = new_x
@@ -530,8 +587,10 @@ def move_model_particles(e_events, idx_of_entrainment, model_particles,
             new_x = -1
             particle[0] = new_x
 
-    model_particles[entrainment] = particle
-
+        model_particles[entrainment] = particle
+        print(f'model_particles after single entrainment: {model_particles}')
+    
+   
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
     
