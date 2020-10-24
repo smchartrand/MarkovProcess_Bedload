@@ -5,7 +5,6 @@ import time
 import numpy as np
 import sympy as sy
 import copy
-import collections
 import parameters # Import the parameters defined in the parameters file
 
 from matplotlib import pyplot as plt
@@ -81,6 +80,25 @@ class Model():
                                                       self.bed_particles)
             
 
+class NoSupportingParticlesFoundError(Exception):
+    """ Exception raised when insufficient supporting particles found
+        for a given particle
+        
+    
+    Keyword arguments:
+    particle - the particle that caused the error
+    message - explanation of error
+    
+    """
+    #TODO: have exception display the supporting particles (if one was found)
+    def __init__(self, particle, message = """Zero or one supporting particles 
+                                                      found for particle"""):
+        self.particle = particle
+        self.supporting = supporting_particles
+        self.message = message
+    
+    def __str__(self):
+        return f' {self.message}: {self.particle}'
 
 ############################################################################### 
 #%% Initial Packing of Streambed 
@@ -188,7 +206,7 @@ def determine_num_particles(pack_frac, num_vertices):
     return num_particles
 
 
-def place_particle(placement_idx, particle_diam, model_particles, 
+def place_particle(particle, particle_diam, model_particles, 
                    bed_particles):
     """ Calculate new X and Y of particle based on location in stream.
     
@@ -198,7 +216,7 @@ def place_particle(placement_idx, particle_diam, model_particles,
     search for 2 neighbouring particles (n1, n2) that pA might
     come into contact with when placed at xA. 
     
-    Calculate the Y and X position of pA
+    Calculate the Y and X 'resting' position of pA
     with a system of equations that uses
     the position of n1 and n2.
     
@@ -212,18 +230,19 @@ def place_particle(placement_idx, particle_diam, model_particles,
     
     #TODO: make sure 'find_neighbours' can never find itself
     # find the two neighbours of the particle
-    left_neighbour, right_neighbour = find_neighbours_of(placement_idx, 
-                                                         model_particles, 
-                                                         bed_particles)
+    left_support, right_support = find_supporting_particles_of(particle, 
+                                                        model_particles, 
+                                                        bed_particles,
+                                                        already_placed=False)
    
     # initialize neighbour (g1 and g2) and placed particle information using info from the storage arrays
-    x1 = left_neighbour[0]
-    y1 = left_neighbour[2]
-    r1 = left_neighbour[1] / 2
+    x1 = left_support[0]
+    y1 = left_support[2]
+    r1 = left_support[1] / 2
     
-    x2 = right_neighbour[0]
-    y2 = right_neighbour[2]
-    r2 = right_neighbour[1] / 2
+    x2 = right_support[0]
+    y2 = right_support[2]
+    r2 = right_support[1] / 2
     
     rp = particle_diam / 2 
     
@@ -248,7 +267,7 @@ def place_particle(placement_idx, particle_diam, model_particles,
 
 
 def update_particle_states(model_particles, bed_particles):
-    """ Set each model particle state according 'active' rules.
+    """ Set each model particle's current 'active' state.
     
     
     
@@ -262,10 +281,10 @@ def update_particle_states(model_particles, bed_particles):
     indicated by a boolean 1.
     
     Note: bed particles are always considered
-    Inactive in the model.
+    Inactive.
     
     
-    Keyword arguments:ß
+    Keyword arguments:
     model_particles -- model particle list
     bed_particles -- bed particle list
     
@@ -278,9 +297,12 @@ def update_particle_states(model_particles, bed_particles):
     in_stream_particles = model_particles[model_particles[:,0] != -1]
     for particle in in_stream_particles:
         
-        left_neighbour, right_neighbour = find_neighbours_of(particle[0], 
-                                                             model_particles, 
-                                                             bed_particles)
+        left_neighbour, right_neighbour = find_supporting_particles_of(
+                                                        particle, 
+                                                        model_particles, 
+                                                        bed_particles,
+                                                        already_placed=True)
+            
         # note: this method below could be improved if find_neighbours_of 
         # would indicate if a neighbour belongs to the model or bed particles
         if left_neighbour[2] > 0 and left_neighbour[2] < particle[2]:
@@ -305,63 +327,50 @@ def set_state(particle, status):
     return particle
 
     
-def find_neighbours_of(particle_x, model_particles, bed_particles):
-    """ Find the 2 neighbouring bottom (left, right) particles of particle_idx.
+def find_supporting_particles_of(particle, model_particles, bed_particles,
+                                 already_placed):
+    """ Find the 2 supporting particles for a given particle 'particle'.
     
-    
+    #TODO: Update description
     A particle's center must be within +/- radius of
     particle_idx to be considered a neighbour of 
     particle_idx. Of those particles that qualify, only
     the two with the greatest elevations (Y) will be taken.
     
-    Keyword arguments:
-        
+    Keyword arguments:   
     particle_idx -- the x-location considered for neighbours
     model_particles -- model particle list
     bed_particles -- bed particle list
     """ 
-
+    
+    if already_placed:
+        # TODO: we know that a particle cannot be supported by a particle
+        # not directly below it. Find a programmic way to identify layers and 
+        # eleminate all particles not in the layer directly below a particle  
+        considered_particles = model_particles[
+                                    (model_particles[:,2] < particle[2])]
+        all_particles = np.concatenate((considered_particles, 
+                                               bed_particles), axis=0)
+    else:
+        all_particles = np.concatenate((model_particles, 
+                                               bed_particles), axis=0)
+        
     # look for particles with center R (radius) away from particle_idx 
-    left_neighbour_center = particle_x - (parameters.set_radius)
-    right_neighbour_center = particle_x + (parameters.set_radius)
+    left_center = particle[0] - (parameters.set_radius)
+    right_center = particle[0] + (parameters.set_radius)
+   
+    left_candidates = all_particles[all_particles[:,0]== left_center]
+    left_support = left_candidates[left_candidates[:,2] 
+                                   == np.max(left_candidates[:,2])]
     
-    #TODO: assert/check that only one neighbour has been found
-    #     If multiple neighbours found this means a verticle stack has occured?
+    right_candidates = all_particles[all_particles[:,0] == right_center]
+    right_support = right_candidates[right_candidates[:,2]
+                                    == np.max(right_candidates[:,2])]
     
-    # Look for left neighbour:
-    # first search model particles for matches
-    left_neighbour_idx_model = np.where(model_particles[:,0] == left_neighbour_center)
-    
-    
-    # if no such model particle found, search bed particle array
-    if left_neighbour_idx_model[0].size == 0: 
-        left_neighbour_idx_bed = np.where(bed_particles[:, 0] == left_neighbour_center)
+    if right_support.size == 0 or left_support.size == 0:
+        raise NoSupportingParticlesFoundError(particle)
 
-        if left_neighbour_idx_bed[0].size == 0:
-            # TODO: need to handle these errors - exit simulation?
-            raise ValueError(f'No left neighbours found for location {particle_x}')
-        else:
-            left_neighbour = bed_particles[left_neighbour_idx_bed]
-    else:
-        left_neighbour = model_particles[left_neighbour_idx_model]
-
-        
-    # Look for right neighbour:
-    # first search model particles for matches
-    right_neighbour_idx_model = np.where(model_particles[:,0] == right_neighbour_center)
-    
-    if right_neighbour_idx_model[0].size == 0:
-        right_neighbour_idx_bed = np.where(bed_particles[:,0] == right_neighbour_center)
-        if right_neighbour_idx_bed[0].size == 0:
-            raise ValueError(f'No right neighbours found for location {particle_x}')
-        else:
-            right_neighbour = bed_particles[right_neighbour_idx_bed]
-    else:
-        right_neighbour = model_particles[right_neighbour_idx_model]  
-        
-    # print(f'Event particle landing at {particle_idx} has l-neighbour {left_neighbour[0][0]} and r-neighbour {right_neighbour[0][0]}')
-
-    return left_neighbour[0], right_neighbour[0]
+    return left_support[0], right_support[0]
 
 ##TODO: extract into create and set functions
 def set_model_particles(bed_vertices, bed_particles):
@@ -407,11 +416,7 @@ def set_model_particles(bed_vertices, bed_particles):
     #### FOR TESTING:
     chosen_vertex = np.zeros(num_particles)
     ####
-    
-    new_vertices = np.zeros((num_particles,2))
-    nulled_vertices = np.zeros((num_particles))
-    
-    
+  
     for particle in range(num_particles):  
         
         # the following lines select a vertex to place the current particle at, 
@@ -425,26 +430,21 @@ def set_model_particles(bed_vertices, bed_particles):
         #### FOR TESTING: 
         chosen_vertex[particle] = vertex
         ####
-  
-        # place particle at the chosen vertex
-        p_x, p_y = place_particle(vertex, parameters.set_diam, model_particles, bed_particles)
         
         # intialize the particle information
-        model_particles[particle][0] = p_x
+        model_particles[particle][0] = vertex
         model_particles[particle][1] = parameters.set_diam
-        model_particles[particle][2] = p_y
+        
         model_particles[particle][3] = particle # id number for each particle
         model_particles[particle][4] = 1 # each particle begins as active
         
-        nulled_vertices[particle] = vertex
-        # store each particles vertex information in new_vertices
-        new_vertices[particle][0] = (p_x) - (parameters.set_diam/2)
-        new_vertices[particle][1] = (p_x) + (parameters.set_diam/2)
+        # place particle at the chosen vertex
+        p_x, p_y = place_particle(model_particles[particle], parameters.set_diam, model_particles, bed_particles)
         
-    # flatten both vertex arrays so that they can be merged together by insort()
-    new_vertices = new_vertices.flatten()
-    bed_vertices = bed_vertices.flatten()
-        
+        model_particles[particle][0] = p_x
+        model_particles[particle][2] = p_y
+ 
+       
     available_vertices = compute_available_vertices(model_particles, bed_particles)
     
     # update particle states so that supporting particles are inactive
@@ -469,12 +469,11 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
 
     #TODO: update desc and keyword to outline the logic of computation
     
-    Keyword arguments:
-    
+    Keyword arguments: 
     model_particles    -- list of model particles
     bed_particles      -- list of bed particles
     lifted             -- boolean flag indicating if calculation should 
-                        take into account particles 'lifed' from the bed
+                            take into account particles being 'lifed' 
     lifted_particles   -- idx of the 'lifted' particles
     """
     nulled_vertices = []
@@ -548,7 +547,6 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
     """
     T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, 
                                    e_events).reshape(1, e_events))
-    
     # https:\\stackoverflow.com\questions\2106503\
     # Now distribute the random variables over a pseudo exponential
     # distribution based on inverse transform sampling.
@@ -557,38 +555,43 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
     # For now I am multuplying by 10 so units are consistent (). Rounding
     # the output to map the entrained particles to the 2D grid.
     L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
+    L_x_init = list(L_x_init)
     
     # compute the avaliable vertices with event particles 'lifted'
     available_vertices = compute_available_vertices(model_particles,
                                                      bed_particles, 
                                                      True,
                                                      idx_of_event_particles)
-    plot_stream(bed_particles, model_particles, 200, 100/4, available_vertices)
-# TODO: Update comment for this section    
-    for entrainment in idx_of_event_particles: 
-        
+    available_vertices = np.sort(available_vertices)
+ 
+    for count, entrainment in enumerate(idx_of_event_particles): 
         particle = model_particles[entrainment]
-        unverified_hop = particle[0] + L_x_init 
-        try:       
-            # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
-            # iterate over the valid vertex set and identify the closest vertex equal to or greater than  unverified_hop
-            verified_hop = next(x[1] for x in enumerate(available_vertices) if np.any(x[1] >= unverified_hop))
-            
-            print("Particle " + str(int(particle[3])) + " being entrained from " + str(particle[0]) + " to " + str(verified_hop))
-            
-            available_vertices = available_vertices[available_vertices != verified_hop]
-            # get the particles initial x, y and diameter information in the bed
-            new_x, new_y = place_particle(verified_hop, parameters.set_diam, model_particles, bed_particles)
-            particle[0] = new_x
-            particle[2] = new_y
+        unverified_hop = particle[0] + L_x_init[0][count]    
+        # from: https://stackoverflow.com/questions/2236906/first-python-list-index-greater-than-x
+        # iterate over the valid vertex set and identify the closest vertex equal to or greater than  unverified_hop
 
-        except StopIteration:
+        # available vertices _needs_ to be sorted for 575-593 to work
+        # TODO: extract 575-593 into function
+        forward_vertices = available_vertices[available_vertices >= unverified_hop]
+        if forward_vertices.size < 1:
             print("Particle exceeded stream... sending to -1 axis") 
             new_x = -1
             particle[0] = new_x
+            
+        else:
+            verified_hop = forward_vertices[0]
+            
+            print(f"""Particle {particle[3]} being entrained from {particle[0]} to {verified_hop} with desired hop {unverified_hop}""")
+            
+            available_vertices = available_vertices[available_vertices != verified_hop]
+            particle[0] = verified_hop
+            # get the particles initial x, y and diameter information in the bed
+            new_x, new_y = place_particle(particle, parameters.set_diam, model_particles, bed_particles)
+            particle[0] = new_x
+            particle[2] = new_y           
 
         model_particles[entrainment] = particle
-        print(f'model_particles after single entrainment: {model_particles}')
+        #print(f'model_particles after single entrainment: {model_particles}')
     
    
     # update particle states so that supporting particles are inactive
