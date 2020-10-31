@@ -6,6 +6,7 @@ import numpy as np
 import sympy as sy
 import copy
 import parameters # Import the parameters defined in the parameters file
+from collections import Counter
 
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
@@ -366,7 +367,7 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
     right_candidates = all_particles[all_particles[:,0] == right_center]
     right_support = right_candidates[right_candidates[:,2]
                                     == np.max(right_candidates[:,2])]
-    
+    # TODO: .size == 0 considered non-pythonic
     if right_support.size == 0 or left_support.size == 0:
         raise NoSupportingParticlesFoundError(particle)
 
@@ -537,13 +538,11 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
                 n - (n-1) to be pushed forward
     
     Keyword arguments:
-    e_events -- the number of entrainment events to occur
-    event_particles -- the particles selected for entrainment
-    avaliable_vertices -- list of avaliable vertices
-    model_particles -- list of model particles
-    bed_particles -- list of bed particles
-    bed_vertices -- list of bed vertices
-    nulled_vertices -- list of currently nulled vertices
+    e_events                -- the number of entrainment events to occur
+    idx_of_event_particles  -- list of indexes into the model_particles array
+                              of the entrainment particles
+    model_particles         -- list of model particles
+    bed_particles           -- list of bed particles
     """
     T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, 
                                    e_events).reshape(1, e_events))
@@ -563,7 +562,7 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
                                                      True,
                                                      idx_of_event_particles)
     available_vertices = np.sort(available_vertices)
- 
+    av_copy = copy.deepcopy(available_vertices)
     for count, entrainment in enumerate(idx_of_event_particles): 
         particle = model_particles[entrainment]
         unverified_hop = particle[0] + L_x_init[0][count]    
@@ -582,8 +581,7 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
             verified_hop = forward_vertices[0]
             
             print(f"""Particle {particle[3]} being entrained from {particle[0]} to {verified_hop} with desired hop {unverified_hop}""")
-            
-            available_vertices = available_vertices[available_vertices != verified_hop]
+            av_copy = av_copy[av_copy != verified_hop]
             particle[0] = verified_hop
             # get the particles initial x, y and diameter information in the bed
             new_x, new_y = place_particle(particle, parameters.set_diam, model_particles, bed_particles)
@@ -593,7 +591,44 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
         model_particles[entrainment] = particle
         #print(f'model_particles after single entrainment: {model_particles}')
     
-   
+    #TODO: improve implementation
+    unique_entrainment_choices = False
+    while unique_entrainment_choices == False:
+        event_particles = model_particles[idx_of_event_particles]
+        # Note: np.unique() runs in O(nlogn) due to sorting implementation.
+        # if model consistently uses _very_ large particle sets then 
+        # Counter() duplicate method should be considered given RT O(n)
+        unique, count = np.unique(event_particles[:,0], 
+                                           return_counts=True)
+        nonunique_choices = unique[count < 1]
+
+        samev_particles = event_particles[np.in1d(event_particles[:,0], nonunique_choices)]
+        
+        if samev_particles.size == 0:
+            unique_entrainment_choices = True
+            break
+        else:
+            stay_particle = samev_particles[random.sample(range(len(samev_particles)), 1)]
+            relocated_particles = samev_particles[samev_particles[:,3] != stay_particle[0][3]]
+            for particle in relocated_particles:
+                forward_vertices = av_copy[av_cpy > particle[0]]
+                if forward_vertices.size < 1:
+                    print("Particle exceeded stream... sending to -1 axis during Unique Choice correction") 
+                    new_x = -1
+                    particle[0] = new_x
+                    
+                else:
+                    verified_hop = forward_vertices[0]
+                    particle[0] = verified_hop
+                    # get the particles initial x, y and diameter information in the bed
+                    new_x, new_y = place_particle(particle, parameters.set_diam, model_particles, bed_particles)
+                    particle[0] = new_x
+                    particle[2] = new_y 
+                    
+            model_particles[entrainment] = particle
+                
+                
+        
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
     
