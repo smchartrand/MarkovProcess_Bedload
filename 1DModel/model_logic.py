@@ -1,12 +1,10 @@
 from __future__ import division
 import math
 import random
-import time
 import numpy as np
 import sympy as sy
 import copy
 import parameters # Import the parameters defined in the parameters file
-from collections import Counter
 
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
@@ -42,7 +40,7 @@ class Model():
     def run(self):    
         
         e_events_store = np.zeros(self.iterations)
-        subregions = create_subregions(self.bed_length, self.num_subregions)
+        subregions = define_subregions(self.bed_length, self.num_subregions)
        
         for iteration in range(parameters.n_iterations):
             print(self.ITERATION_HEADER.format(iteration=iteration))
@@ -61,6 +59,7 @@ class Model():
             move_model_particles(total_e_events, event_particles, 
                                                     self.model_particles, 
                                                     self.bed_particles)
+        return subregions
         
             
 class Subregion():
@@ -87,7 +86,6 @@ class Subregion():
     
     def getName(self):
         return self.name
-    
     
     
 class NoSupportingParticlesFoundError(Exception):
@@ -166,8 +164,8 @@ def get_event_particles(e_events, subregions, model_particles):
     return total_e_events, event_particles
 
 
-def create_subregions(bed_length, subregions):
-    """ Create Subregion list of subregions.
+def define_subregions(bed_length, subregions):
+    """ Define subregions using list of Subregion objects.
     
 
     Keyword arguments:
@@ -707,22 +705,19 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
             particle[2] = placed_y
             
         model_particles[idx] = particle
-    #TODO: This is not the numpy way to do things
-    for hop in chosen_hops:
-        available_vertices = available_vertices[available_vertices != hop]
-    check_unique_hops(model_particles, 
-                        bed_particles,
-                        idx_of_event_particles,
-                        available_vertices)
+    # TODO: re-write unique hop check... is incorrect
+    # model_particles = check_unique_hops(model_particles, 
+    #                     bed_particles,
+    #                     idx_of_event_particles,
+    #                     available_vertices)
 
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
     
-    ## FOR TESTING:
-    # sleep to more easily see the bed migration in matplotlib
-    time.sleep(1)
-    ###
-
+    # compute the avaliable vertices with event particles 'lifted'
+    available_vertices = compute_available_vertices(model_particles,
+                                                     bed_particles, 
+                                                     False)
     plot_stream(bed_particles, model_particles, 250, 100/4, available_vertices)
     return
 
@@ -809,9 +804,8 @@ def check_unique_hops(model_particles, bed_particles, event_particle_idxs,
                     particle[2] = placed_y 
                     
                 model_particles[particle[3]] = particle
-                available_vertices = available_vertices[
-                                    available_vertices != np.any(chosen_hops)]   
-        return
+  
+        return model_particles
     
     
 def find_closest_vertex(desired_hop, available_vertices):
