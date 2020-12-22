@@ -3,6 +3,7 @@ import math
 import random
 import numpy as np
 import sympy as sy
+import time
 import copy
 import parameters # Import the parameters defined in the parameters file
 
@@ -669,6 +670,11 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
 
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
+    
+    ## FOR TESTING:
+    # sleep to more easily see the bed migration in matplotlib
+    time.sleep(1)
+    ###
 
     return model_particles
 
