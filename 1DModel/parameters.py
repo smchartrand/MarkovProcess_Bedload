@@ -7,7 +7,7 @@ import math
 Pack = 0.52
 
 # Length of the domain in the streamwise direction in millimeters.
-x_max = 250
+x_max = 500
 
 # Spacing of nodes in millimeters.
 Grid_Spacing = 1
@@ -22,11 +22,12 @@ set_radius = (set_diam / 2.0)
 
 # number of bed particles based on stream length
 max_particles = int(math.ceil( x_max / set_diam ))
+num_subregions = 4
 
 
 ''' Model Run Parameters '''
 # number of model iterations  
-n_iterations = 50
+n_iterations = 100
 lambda_1 = 1
 
 # Particle travel time minimum (t).

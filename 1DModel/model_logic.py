@@ -15,51 +15,6 @@ from matplotlib.patches import Circle
 # FOR TESTING: 
 def pause():
     programPause = input("Press the <ENTER> key to continue...")
-    
-    
-class Model():
-    
-    ITERATION_HEADER = ("""\n
-    --------------------- Iteration {iteration} ---------------------
-    """)
-    
-    ITERATION_TEMPLATE = ("""
-    # of entrainment events: {e_events}\n
-    Particles to be entrained: {particles}\n                          
-   """)
-    
-    def __init__(self, bed_particles, model_particles, bed_length, 
-                 num_subregions, lambda_1, iterations):    
-        self.bed_particles = bed_particles
-        self.model_particles = model_particles
-        self.bed_length = bed_length
-        self.num_subregions= num_subregions
-        self.lambda_1 = lambda_1
-        self.iterations = iterations
-    
-    def run(self):    
-        
-        e_events_store = np.zeros(self.iterations)
-        subregions = define_subregions(self.bed_length, self.num_subregions)
-       
-        for iteration in range(parameters.n_iterations):
-            print(self.ITERATION_HEADER.format(iteration=iteration))
-            # Calculate the number of entrainment events per-unit-area
-            e_events = np.random.poisson(self.lambda_1, None)
-            total_e_events, event_particles = get_event_particles(
-                                                        e_events, 
-                                                        subregions, 
-                                                        self.model_particles)
-           
-            e_events_store[iteration] = e_events
-            print(self.ITERATION_TEMPLATE.format(
-                                        e_events=total_e_events, 
-                                        particles=event_particles))
-                
-            move_model_particles(total_e_events, event_particles, 
-                                                    self.model_particles, 
-                                                    self.bed_particles)
-        return subregions
         
             
 class Subregion():
@@ -126,7 +81,7 @@ def get_event_particles(e_events, subregions, model_particles):
     
     event_particles = []
     for subregion in subregions:
-        
+        # Filter array for only active, in-stream particles per subregion
         subregion_particles = model_particles[
                 (model_particles[:,0] >= subregion.leftBoundary())
               & (model_particles[:,0] <= subregion.rightBoundary())]
@@ -272,12 +227,11 @@ def build_streambed():
 
 
 def get_bed_vertices(bed_particles):
-    # create array of bed_vertices based on bed_particles array
     bed_vertices = np.zeros(parameters.x_max, dtype=bool)
-
     bed_vertices[bed_particles[1:,3].astype(int)] = 1
     # x-indexes of avaliable vertices to place model particles at
     bed_vertices = np.transpose(np.nonzero(bed_vertices))
+    
     return bed_vertices
 
 
@@ -595,6 +549,8 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     nulled_vertices = []
     avail_vertices = []
     
+    # If we are lifting particles, we need to consider the subset of particles
+    # that includes every particles _except_ the particles being 
     if lifted == True:
         model_particles_lifted = copy.deepcopy(model_particles)
         
@@ -634,7 +590,7 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     return available_vertices
 
 
-def move_model_particles(e_events, idx_of_event_particles, model_particles, 
+def move_model_particles(e_events, idx_of_event_particles, model_particles,
                          bed_particles):
     """ Move selected model particles for entrainment.
     
@@ -671,11 +627,11 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
     L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
     L_x_init = list(L_x_init)
     
-    # compute the avaliable vertices with event particles 'lifted'
+     # compute available vertices for this iteration, lifting event particles
     available_vertices = compute_available_vertices(model_particles,
-                                                     bed_particles, 
-                                                     True,
-                                                     idx_of_event_particles)
+                                                    bed_particles, 
+                                                    True,
+                                                    idx_of_event_particles) 
     chosen_hops = []
     for count, idx in enumerate(idx_of_event_particles): 
         
@@ -694,7 +650,7 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
         else:
             hop_msg = (
                 f'Particle {int(particle[3])} entrained from {particle[0]} '
-                f'to {verified_hop}. Desired hop was: {unverified_hop}'
+                f'to {verified_hop}. Desired placement was: {unverified_hop}'
             )
             print(hop_msg)
             chosen_hops.append(verified_hop)
@@ -713,13 +669,8 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
 
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
-    
-    # compute the avaliable vertices with event particles 'lifted'
-    available_vertices = compute_available_vertices(model_particles,
-                                                     bed_particles, 
-                                                     False)
-    plot_stream(bed_particles, model_particles, 250, 100/4, available_vertices)
-    return
+
+    return model_particles
 
 
 def check_unique_hops(model_particles, bed_particles, event_particle_idxs, 
@@ -830,7 +781,8 @@ def find_closest_vertex(desired_hop, available_vertices):
 
 
 # Taken from original model
-def plot_stream(bed_particles, model_particles, x_lim, y_lim, available_vertices):
+def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
+                available_vertices, to_file):
     """ Plot the complete stream from 0,0 to x_lim and y_lim. Bed particles 
     are plotted as light grey and model particles are dark blue. Allows
     for closer look at state of a subregion of the stream during simulation """
@@ -872,5 +824,11 @@ def plot_stream(bed_particles, model_particles, x_lim, y_lim, available_vertices
 ##    for green in chosen_vertex:
 #        plt.axvline(x=green, color='g', linestyle='-')
     ### 
-    plt.show()
+    plt.title(f'Iteration {iteration}')
+    if to_file:
+        filename = f'iter_{iteration}.png'
+        path = 'plots/' + filename
+        plt.savefig(path)
+    else:
+        plt.show()
     return
