@@ -9,15 +9,15 @@ import parameters # Import the parameters defined in the parameters file
 
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
+from collections import defaultdict
 from matplotlib.patches import Circle
-
 
 
 # FOR TESTING: 
 def pause():
     programPause = input("Press the <ENTER> key to continue...")
-        
-            
+    
+# TODO: refactor from class to simple struct (dict, maybe?)
 class Subregion():
     """ Subregion class.
     
@@ -42,28 +42,8 @@ class Subregion():
     
     def getName(self):
         return self.name
-    
-    
-class NoSupportingParticlesFoundError(Exception):
-    """ Exception raised when insufficient supporting 
-    particles found for a given particle
         
     
-    Keyword arguments:
-    particle - the particle that caused the error
-    message - explanation of error
-    
-    """
-    #TODO: have exception display the supporting particles (if one was found)
-    def __init__(self, particle, message = """Zero or one supporting particles 
-                                                      found for particle"""):
-        self.particle = particle
-        self.message = message
-    
-    def __str__(self):
-        return f' {self.message}: {self.particle}'
-
-
 def get_event_particles(e_events, subregions, model_particles):
     """ Find and return list of particles to be entrained
 
@@ -115,13 +95,12 @@ def get_event_particles(e_events, subregions, model_particles):
             print(msg)
 
         event_particles = event_particles + subregion_event_ids
-        total_e_events = len(event_particles)
         
-    return total_e_events, event_particles
+    return event_particles
 
 
-def define_subregions(bed_length, subregions):
-    """ Define subregions using list of Subregion objects.
+def define_subregions(bed_length, num_subregions):
+    """ Define subregions list.
     
 
     Keyword arguments:
@@ -132,14 +111,12 @@ def define_subregions(bed_length, subregions):
     subregions_arr -- The np array of subregions
 
     """
-    # Subregions must be able to cover length of the bed
-    assert(math.remainder(bed_length, subregions) == 0)
+    assert(math.remainder(bed_length, num_subregions) == 0)
     
-    subregion_length = bed_length/subregions
+    subregion_length = bed_length/num_subregions
     left_boundary = 0
     subregions_arr = []
-    for region in range(subregions):
-        
+    for region in range(num_subregions):       
         right_boundary = left_boundary + subregion_length
         subregion = Subregion(f'subregion_{region}', left_boundary, right_boundary)
         left_boundary = right_boundary
@@ -323,11 +300,10 @@ def update_particle_states(model_particles, bed_particles):
     
     If any model particle (pX) has a particle 
     resting on it in the stream then pX must 
-    be set to Inactive indicated by a boolean 0 
-    in its model particle list slot.
+    be set to Inactive indicated by a boolean 0.
     
     If pX does not have any particles resting
-    on it then it is considered Active 
+    on top of it then it is considered Active 
     indicated by a boolean 1.
     
     Note: bed particles are always considered
@@ -436,8 +412,7 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
                                     == np.max(right_candidates[:,2])]
     # TODO: .size == 0 considered non-pythonic
     if right_support.size == 0 or left_support.size == 0:
-        raise NoSupportingParticlesFoundError(particle)
-
+        raise ValueError 
     return left_support[0], right_support[0]
 
 ##TODO: extract into create and set functions
@@ -591,15 +566,15 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     return available_vertices
 
 
-def move_model_particles(e_events, idx_of_event_particles, model_particles,
+def move_model_particlesDEP(e_events, event_particle_ids, model_particles,
                          bed_particles):
     """ Move selected model particles for entrainment.
     
     
     
     Calculate jump distances for each particle and place 
-    where stream vertices allow. 
-    
+    where stream vertices allow.  
+        
     Follows the current logic:
         1. lift all event particles and calculate available vertices
         2. move all event particles to downstream vertex 
@@ -611,7 +586,7 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
     
     Keyword arguments:
     e_events                -- the number of entrainment events to occur
-    idx_of_event_particles  -- list of indexes into the model_particles array
+    event_particle_ids  -- list of indexes into the model_particles array
                               of the entrainment particles
     model_particles         -- list of model particles
     bed_particles           -- list of bed particles
@@ -632,11 +607,11 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
     available_vertices = compute_available_vertices(model_particles,
                                                     bed_particles, 
                                                     True,
-                                                    idx_of_event_particles) 
-    chosen_hops = []
-    for count, idx in enumerate(idx_of_event_particles): 
+                                                    event_particle_ids) 
+    entrainment_dict = {}
+    for count, particle_id in enumerate(event_particle_ids): 
         
-        particle = model_particles[idx]
+        particle = model_particles[particle_id]
         unverified_hop = particle[0] + L_x_init[0][count]    
         verified_hop = find_closest_vertex(unverified_hop, available_vertices)
         
@@ -647,26 +622,24 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
             )
             print(exceed_msg) 
             particle[0] = verified_hop
-            
         else:
             hop_msg = (
                 f'Particle {int(particle[3])} entrained from {particle[0]} '
                 f'to {verified_hop}. Desired placement was: {unverified_hop}'
             )
             print(hop_msg)
-            chosen_hops.append(verified_hop)
+            
             particle[0] = verified_hop # send particle to hop before placement
             placed_x, placed_y = place_particle(particle, parameters.set_diam, 
                                           model_particles, bed_particles)
             particle[0] = placed_x
             particle[2] = placed_y
-            
-        model_particles[idx] = particle
+        
+        entrainment_dict[particle_id] = verified_hop
+        model_particles[particle_id] = particle
     # TODO: re-write unique hop check... is incorrect
-    # model_particles = check_unique_hops(model_particles, 
-    #                     bed_particles,
-    #                     idx_of_event_particles,
-    #                     available_vertices)
+    check_unique_entrainments(entrainment_dict)
+    pause()
 
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
@@ -679,94 +652,77 @@ def move_model_particles(e_events, idx_of_event_particles, model_particles,
     return model_particles
 
 
-def check_unique_hops(model_particles, bed_particles, event_particle_idxs, 
-                      available_vertices):
-    """ Ensure no event particles hop to the same vertex
+def run_entrainments(model_particles, bed_particles, event_particle_ids, lambda_1):
+    # compute available vertices for this iteration, lifting event particles
+    available_vertices = compute_available_vertices(model_particles, bed_particles, lifted=True, lifted_particles=event_particle_ids)
+    unverified_entrainments = fathel_et_al_hops(event_particle_ids, model_particles, lambda_1)
+    entrainment_dict, model_particles, available_vertices = move_model_particles(unverified_entrainments, model_particles, bed_particles, available_vertices)
+    unique_entrainments, redo_particles = check_unique_entrainments(entrainment_dict)
+     
+    while not unique_entrainments:
+        redo_entrainments = model_particles[np.searchsorted(model_particles[:,3], redo_particles)]
+        entrainment_dict, model_particles, available_vertices = move_model_particles(redo_entrainments, model_particles, bed_particles, available_vertices)
+        unique_entrainments, redo_particles = check_unique_entrainments(entrainment_dict)
+
+    model_particles = update_particle_states(model_particles, bed_particles)
     
-    Note: This check is only necessary because order is not
-    enforced on particle entrainments. This means that during
-    entrainment, particles hop to a vertex regardless of a 
-    previous particle's hop choice
-    
-    
-    
-    Keyword arguments:
-    model_particles -- np array of the model particles
-    bed_particles -- np array of the bed particles
-    event_particle_idxs -- indexes (in model_particles) of the 
-                            event particles in question
-    available_vertices -- np array of the available vertices
-                            after the initial entrainment
-    
-    """
-    unique_entrainment_choices = False
-    while unique_entrainment_choices == False:
-        event_particles = model_particles[event_particle_idxs]
-        # Note: np.unique() runs in O(nlogn) due to sorting implementation.
-        # if model consistently uses _very_ large particle sets then 
-        # Counter() duplicate method should be implmented b/c runs O(n)
-        
-        # Find particle's whose verified hop was not unique
-        unique, count = np.unique(event_particles[:,0], return_counts=True)
-        nonunique_choices = unique[count < 1]
-        samev_particles = event_particles[np.in1d(event_particles[:,0], 
-                                                  nonunique_choices)]
-        #TODO: This implementation only works if there is 1 non-unique vertex
-        # more than one and it incorrectly moves the particles
-        if samev_particles.size == 0:
-            unique_entrainment_choices = True
-            print('\nAll hops unique... no corrections needed')
-            break
-        else:
-            nunique_msg = (
-                f'\n{samev_particles.size} particles sent to the '
-                f'same vertex during entrainment... correcting\n'
-            )
-            print(nunique_msg)
-            stay_particle = samev_particles[random.sample(
-                range(len(samev_particles)), 1)]
-            stay_msg = (
-                f'\nParticle {stay_particle[0][3]} randomly selected to stay'
-                f'... all others being forced to next available vertex'
-            )
-            print(stay_msg)
-            relocated_particles = samev_particles[
-                samev_particles[:,3] != stay_particle[0][3]]
-            # NOTE2: this loop is repeated code from move_model_particles
-            chosen_hops = []
-            for particle in relocated_particles:
-                forced_hop = find_closest_vertex(particle[0], available_vertices)
-    
-                if forced_hop == -1:
-                    forced_msg = (
-                          'Particle exceeded stream during unique choice  '
-                          'correction... sending to -1 axis'
-                    )
-                    print(forced_msg)
-                    particle[0] = forced_hop                   
-                else:
-                    hop_msg = (
-                        f'Particle {int(particle[3])} moved from {particle[0]} '
-                        f'to {forced_hop} during unique choice correction'
-                    )
-                    print(hop_msg)
-                    chosen_hops.append(forced_hop)
-                    particle[0] = forced_hop
-                    # get the particles initial x, y and diameter information in the bed
-                    placed_x, placed_y = place_particle(particle, 
-                                                  parameters.set_diam, 
-                                                  model_particles, 
-                                                  bed_particles)
-                    particle[0] = placed_x
-                    particle[2] = placed_y 
-                    
-                model_particles[particle[3]] = particle
+    return model_particles
   
-        return model_particles
+        
+def fathel_et_al_hops(event_particle_ids, model_particles, lambda_1):
+    event_particles = model_particles[np.searchsorted(model_particles[:,3], event_particle_ids)]
     
+    T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, 
+                                   len(event_particle_ids)).reshape(1, len(event_particle_ids)))
+    # https:\\stackoverflow.com\questions\2106503\
+    # Now distribute the random variables over a pseudo exponential
+    # distribution based on inverse transform sampling.
+    T_p_init2 = np.log(1 - T_p_init1) / (-lambda_1)
+    # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
+    # For now I am multuplying by 10 so units are consistent (). Rounding
+    # the output to map the entrained particles to the 2D grid.
+    L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
+    L_x_init = list(L_x_init)
     
+    event_particles[:,0] = event_particles[:,0] + L_x_init
+    
+    return event_particles
+ 
+       
+def move_model_particles(event_particles, model_particles, bed_particles, available_vertices):
+    entrainment_dict = {}
+    for particle in event_particles:        
+        verified_hop = find_closest_vertex(particle[0], available_vertices)
+        
+        if verified_hop == -1:
+            exceed_msg = (
+                f'Particle {int(particle[3])} exceeded stream...'
+                f'sending to -1 axis'
+            )
+            print(exceed_msg) 
+            particle[0] = verified_hop
+        else:
+            hop_msg = (
+                f'Particle {int(particle[3])} entrained from BLAH '
+                f'to {verified_hop}. Desired placement was: {particle[0]}'
+            )
+            print(hop_msg)
+            particle[0] = verified_hop
+            placed_x, placed_y = place_particle(particle, parameters.set_diam, 
+                                          model_particles, bed_particles)
+            particle[0] = placed_x
+            particle[2] = placed_y
+            
+        entrainment_dict[particle[3]] = verified_hop
+        model_particles[model_particles[:,3] == particle[3]] = particle
+        
+        available_vertices = np.setdiff1d(available_vertices, list(entrainment_dict.values()))
+    
+    return entrainment_dict, model_particles, available_vertices
+    
+
 def find_closest_vertex(desired_hop, available_vertices):
-    """ Find the closest (greater than) available
+    """ Find the closest (greater than or equal) available
     vertex to the desired hop. 
     
     Keyword arguments:
@@ -783,7 +739,35 @@ def find_closest_vertex(desired_hop, available_vertices):
         vertex = -1
     else:
         vertex = forward_vertices[0]
-    return vertex               
+    return vertex    
+
+
+# TODO: confirm the naming of function
+def check_unique_entrainments(entrainment_dict):
+    nonunique_entrainments = []
+    unique_flag = True
+    # create defaultdict struct to avoid missing key errors while grouping
+    entrainment_groups = defaultdict(list)
+    for p_id, vertex in entrainment_dict.items():
+        entrainment_groups[vertex].append(p_id)
+    
+    entrainment_groups = dict(entrainment_groups)
+    for vertex, p_id in entrainment_groups.items():
+        if vertex == -1:
+            pass
+        elif len(p_id) > 1:
+            unique_flag = False
+            nonunique_msg = (
+                f'More than one particle attempting to entrain at {vertex}... '
+                f'correcting.'
+            )
+            print(nonunique_msg)
+            stay_particle = random.sample(p_id, 1)
+            for particle in p_id:
+                if particle != stay_particle:
+                    nonunique_entrainments.append(particle)
+        
+    return unique_flag, nonunique_entrainments     
 
 
 # Taken from original model

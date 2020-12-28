@@ -24,23 +24,17 @@ for iteration in range(pm.n_iterations):
     print(ITERATION_HEADER.format(iteration=iteration))  
     # Calculate the number of entrainment events per-unit-area
     e_events = np.random.poisson(pm.lambda_1, None)
-    total_e_events, event_particles = ml.get_event_particles(
-                                                            e_events, 
-                                                            subregions, 
-                                                            model_particles)
+    event_particles = ml.get_event_particles(e_events, subregions, model_particles)
     print(ITERATION_TEMPLATE.format(
-                                e_events=total_e_events, 
+                                e_events=len(event_particles), 
                                 particles=event_particles))     
     
-    model_particles = ml.move_model_particles(total_e_events, 
-                                              event_particles, 
-                                              model_particles, 
-                                              bed_particles)
+    model_particles = ml.run_entrainments(model_particles, bed_particles, event_particles, pm.lambda_1)
     
     ### FOR TESTING re-calculate avail vertice for plotting
     available_vertices = ml.compute_available_vertices(model_particles, 
                                                        bed_particles)
     ml.plot_stream(iteration, bed_particles, model_particles, 500, 30, 
-                   available_vertices, to_file=True)
+                   available_vertices, to_file=False)
         
-    
+        
