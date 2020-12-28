@@ -691,7 +691,8 @@ def fathel_et_al_hops(event_particle_ids, model_particles, lambda_1):
        
 def move_model_particles(event_particles, model_particles, bed_particles, available_vertices):
     entrainment_dict = {}
-    for particle in event_particles:        
+    for particle in event_particles:  
+        orig_x = model_particles[model_particles[:,3] == particle[3]][0][0]
         verified_hop = find_closest_vertex(particle[0], available_vertices)
         
         if verified_hop == -1:
@@ -703,7 +704,7 @@ def move_model_particles(event_particles, model_particles, bed_particles, availa
             particle[0] = verified_hop
         else:
             hop_msg = (
-                f'Particle {int(particle[3])} entrained from BLAH '
+                f'Particle {int(particle[3])} entrained from {orig_x} '
                 f'to {verified_hop}. Desired placement was: {particle[0]}'
             )
             print(hop_msg)
@@ -758,14 +759,15 @@ def check_unique_entrainments(entrainment_dict):
         elif len(p_id) > 1:
             unique_flag = False
             nonunique_msg = (
-                f'More than one particle attempting to entrain at {vertex}... '
-                f'correcting.'
+                f'More than one particle attempting to entrain at vertex: '
+                f'{vertex}... Randomly selecting one particle to remain, all ' 
+                f'others will be forced to the next available vertex.'
             )
             print(nonunique_msg)
             stay_particle = random.sample(p_id, 1)
             for particle in p_id:
                 if particle != stay_particle:
-                    nonunique_entrainments.append(particle)
+                    nonunique_entrainments.append(int(particle))
         
     return unique_flag, nonunique_entrainments     
 
