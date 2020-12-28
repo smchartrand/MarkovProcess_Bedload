@@ -691,7 +691,7 @@ def fathel_et_al_hops(event_particle_ids, model_particles, lambda_1):
        
 def move_model_particles(event_particles, model_particles, bed_particles, available_vertices):
     entrainment_dict = {}
-    for particle in event_particles:  
+    for particle in event_particles: 
         orig_x = model_particles[model_particles[:,3] == particle[3]][0][0]
         verified_hop = find_closest_vertex(particle[0], available_vertices)
         
@@ -765,8 +765,9 @@ def check_unique_entrainments(entrainment_dict):
             )
             print(nonunique_msg)
             stay_particle = random.sample(p_id, 1)
+            print(stay_particle)
             for particle in p_id:
-                if particle != stay_particle:
+                if particle != stay_particle[0]:
                     nonunique_entrainments.append(int(particle))
         
     return unique_flag, nonunique_entrainments     
