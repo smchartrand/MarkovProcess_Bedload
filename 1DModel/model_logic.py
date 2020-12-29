@@ -409,8 +409,9 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
         left_support = left_candidates[left_candidates[:,2] 
                                        == np.max(left_candidates[:,2])]
     except ValueError:
+        bad_search = True
         print(f'\n\nERROR: no left supporting particles found at {left_center},'
-              f'searching for a article at {particle[0]}\n\n')
+              f'searching for an article at {particle[0]}\n\n')
         raise ValueError
     
     right_candidates = all_particles[all_particles[:,0] == right_center]
@@ -418,9 +419,11 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
         right_support = right_candidates[right_candidates[:,2]
                                     == np.max(right_candidates[:,2])]
     except ValueError:
-        print(f'\n\nERROR: No left supporting particles found at {right_center},'
-              f'searching for a article at {particle[0]}\n\n')
-        raise ValueError
+        bad_search = True
+        print(f'\n\nERROR: No right supporting particles found at {right_center},'
+              f'searching for an article at {particle[0]}\n\n')
+    if bad_search:
+        raise ValueError(f'Supporting particles for particle {particle[3]} not found in model_particles')
 
     return left_support[0], right_support[0]
 
