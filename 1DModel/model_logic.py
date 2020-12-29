@@ -391,10 +391,7 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
     right_support -- the right supporting particle
     """ 
    
-    if already_placed: # do not consider any particles above current height
-        # TODO: we know that a particle cannot be supported by a particle
-        # not directly below it. Find a programmic way to identify layers and 
-        # eleminate all particles not in the layer directly below a particle  
+    if already_placed: # only consider particle below current elevation
         considered_particles = model_particles[
                                     (model_particles[:,2] < particle[2])]
         all_particles = np.concatenate((considered_particles, 
@@ -407,16 +404,24 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
     left_center = particle[0] - (parameters.set_radius)
     right_center = particle[0] + (parameters.set_radius)
    
-    left_candidates = all_particles[all_particles[:,0]== left_center]
-    left_support = left_candidates[left_candidates[:,2] 
-                                   == np.max(left_candidates[:,2])]
+    left_candidates = all_particles[all_particles[:,0] == left_center]
+    try:
+        left_support = left_candidates[left_candidates[:,2] 
+                                       == np.max(left_candidates[:,2])]
+    except ValueError:
+        print(f'\n\nERROR: no left supporting particles found at {left_center},'
+              f'searching for a article at {particle[0]}\n\n')
+        raise ValueError
     
     right_candidates = all_particles[all_particles[:,0] == right_center]
-    right_support = right_candidates[right_candidates[:,2]
+    try:
+        right_support = right_candidates[right_candidates[:,2]
                                     == np.max(right_candidates[:,2])]
-    # TODO: .size == 0 considered non-pythonic
-    if right_support.size == 0 or left_support.size == 0:
-        raise ValueError 
+    except ValueError:
+        print(f'\n\nERROR: No left supporting particles found at {right_center},'
+              f'searching for a article at {particle[0]}\n\n')
+        raise ValueError
+
     return left_support[0], right_support[0]
 
 ##TODO: extract into create and set functions
@@ -562,88 +567,6 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     available_vertices = np.array(avail_vertices)
     
     return available_vertices
-
-
-def move_model_particlesDEP(e_events, event_particle_ids, model_particles,
-                         bed_particles):
-    """ Move selected model particles for entrainment.
-    
-    
-    
-    Calculate jump distances for each particle and place 
-    where stream vertices allow.  
-        
-    Follows the current logic:
-        1. lift all event particles and calculate available vertices
-        2. move all event particles to downstream vertex 
-            nearest to it's unverified hop (x + L_x_init)
-        3. Check if any event particles chose same vertex
-            a. if yes, randomly select from vertices for
-                n - (n-1) to be pushed forward
-            b. if no, continue
-    
-    Keyword arguments:
-    e_events                -- the number of entrainment events to occur
-    event_particle_ids  -- list of indexes into the model_particles array
-                              of the entrainment particles
-    model_particles         -- list of model particles
-    bed_particles           -- list of bed particles
-    """
-    T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, 
-                                   e_events).reshape(1, e_events))
-    # https:\\stackoverflow.com\questions\2106503\
-    # Now distribute the random variables over a pseudo exponential
-    # distribution based on inverse transform sampling.
-    T_p_init2 = np.log(1 - T_p_init1) / (-parameters.lambda_1)
-    # Calculate L_x per Fathel et al., 2015 and Furbish et al., 2017.
-    # For now I am multuplying by 10 so units are consistent (). Rounding
-    # the output to map the entrained particles to the 2D grid.
-    L_x_init = np.round((T_p_init2 ** 2) * 10 * 2, 1)
-    L_x_init = list(L_x_init)
-    
-     # compute available vertices for this iteration, lifting event particles
-    available_vertices = compute_available_vertices(model_particles,
-                                                    bed_particles, 
-                                                    True,
-                                                    event_particle_ids) 
-    entrainment_dict = {}
-    for count, particle_id in enumerate(event_particle_ids): 
-        
-        particle = model_particles[particle_id]
-        unverified_hop = particle[0] + L_x_init[0][count]    
-        verified_hop = find_closest_vertex(unverified_hop, available_vertices)
-        
-        if verified_hop == -1:
-            exceed_msg = (
-                f'Particle {int(particle[3])} exceeded stream...'
-                f'sending to -1 axis'
-            )
-            print(exceed_msg) 
-            particle[0] = verified_hop
-        else:
-            hop_msg = (
-                f'Particle {int(particle[3])} entrained from {particle[0]} '
-                f'to {verified_hop}. Desired placement was: {unverified_hop}'
-            )
-            print(hop_msg)
-            
-            particle[0] = verified_hop # send particle to hop before placement
-            placed_x, placed_y = place_particle(particle, parameters.set_diam, 
-                                          model_particles, bed_particles)
-            particle[0] = placed_x
-            particle[2] = placed_y
-        
-        entrainment_dict[particle_id] = verified_hop
-        model_particles[particle_id] = particle
-    # TODO: re-write unique hop check... is incorrect
-    check_unique_entrainments(entrainment_dict)
-    pause()
-
-    # update particle states so that supporting particles are inactive
-    model_particles = update_particle_states(model_particles, bed_particles)
-
-    return model_particles
-
 
 def run_entrainments(model_particles, bed_particles, event_particle_ids, lambda_1):
     # compute available vertices for this iteration, lifting event particles
