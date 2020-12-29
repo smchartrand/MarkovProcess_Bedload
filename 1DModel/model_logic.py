@@ -355,7 +355,7 @@ def set_state(particle, status):
     
 def find_supporting_particles_of(particle, model_particles, bed_particles,
                                  already_placed):
-    """ Find the 2 supporting particles for a given particle 'particle'.
+    """ Find the 2 supporting particles for a given particle.
     
     Provided a particle (numpy array selection), this
     function will search the stream for particles
@@ -371,11 +371,15 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
         1. The particles is already placed/set in 
         the stream.
         2. The particles is looking to be placed 
-        int he stream at it's define x-location (i.e
+        in the stream at it's defined x-location (i.e
         after an entrainment event)
     
+    Searching for supporting particles at location x could 
+    result in two different results depending on the 
+    aforementioned scenario, hence the distinct methods.
+    
     Keyword arguments:   
-    particle_idx -- the x-location considered for neighbours
+    particle -- array representing a particle 
     model_particles -- model particle list
     bed_particles -- bed particle list
     already_placed -- boolean flag indicating if particle has
@@ -450,11 +454,7 @@ def set_model_particles(bed_particles):
     
     # determine the number of model particles that should be introduced into the stream bed
     num_particles = determine_num_particles(parameters.Pack, num_vertices)
-    
-    ### FOR TESTING - REMOVE LINE BELOW AND UNCOMMENT ABOVE LINE BEFORE SUBMITTING
-    # num_particles = np.size(bed_vertices) - 1
-    
-    # create an empty n-4 array to store model particle information
+    # create an empty n-5 array to store model particle information
     model_particles = np.zeros([num_particles, 5], dtype='float')
     
     #### FOR TESTING:
@@ -528,11 +528,9 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     # If we are lifting particles, we need to consider the subset of particles
     # that includes every particles _except_ the particles being 
     if lifted == True:
-        model_particles_lifted = copy.deepcopy(model_particles)
-        
+        model_particles_lifted = copy.deepcopy(model_particles)   
         model_particles_lifted = np.delete(model_particles_lifted, 
                                            lifted_particles, 0)
-        
         all_particles = np.concatenate((model_particles_lifted, 
                                         bed_particles), axis=0)
     else:    
@@ -643,11 +641,6 @@ def move_model_particlesDEP(e_events, event_particle_ids, model_particles,
 
     # update particle states so that supporting particles are inactive
     model_particles = update_particle_states(model_particles, bed_particles)
-    
-    ## FOR TESTING:
-    # sleep to more easily see the bed migration in matplotlib
-    time.sleep(1)
-    ###
 
     return model_particles
 
@@ -655,12 +648,12 @@ def move_model_particlesDEP(e_events, event_particle_ids, model_particles,
 def run_entrainments(model_particles, bed_particles, event_particle_ids, lambda_1):
     # compute available vertices for this iteration, lifting event particles
     available_vertices = compute_available_vertices(model_particles, bed_particles, lifted=True, lifted_particles=event_particle_ids)
-    unverified_entrainments = fathel_et_al_hops(event_particle_ids, model_particles, lambda_1)
+    unverified_entrainments = fathel_furbish_hops(event_particle_ids, model_particles, lambda_1)
     entrainment_dict, model_particles, available_vertices = move_model_particles(unverified_entrainments, model_particles, bed_particles, available_vertices)
-    unique_entrainments, redo_particles = check_unique_entrainments(entrainment_dict)
+    unique_entrainments, redo_particle_ids = check_unique_entrainments(entrainment_dict)
      
     while not unique_entrainments:
-        redo_entrainments = model_particles[np.searchsorted(model_particles[:,3], redo_particles)]
+        redo_entrainments = model_particles[np.searchsorted(model_particles[:,3], redo_particle_ids)]
         entrainment_dict, model_particles, available_vertices = move_model_particles(redo_entrainments, model_particles, bed_particles, available_vertices)
         unique_entrainments, redo_particles = check_unique_entrainments(entrainment_dict)
 
@@ -669,7 +662,9 @@ def run_entrainments(model_particles, bed_particles, event_particle_ids, lambda_
     return model_particles
   
         
-def fathel_et_al_hops(event_particle_ids, model_particles, lambda_1):
+def fathel_furbish_hops(event_particle_ids, model_particles, lambda_1):
+    """ Given a list of particles
+    """
     event_particles = model_particles[np.searchsorted(model_particles[:,3], event_particle_ids)]
     
     T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, 
@@ -690,6 +685,22 @@ def fathel_et_al_hops(event_particle_ids, model_particles, lambda_1):
  
        
 def move_model_particles(event_particles, model_particles, bed_particles, available_vertices):
+    """ Given an array of particles, move them to next closest valid vertex
+    within the model stream.
+
+    Keyword arguments:
+        event_particles -- list of particles to be moved in stream, index 0
+                            should represent the desired entrainment location
+                            i.e if particle[0] = 6 and the closest available 
+                            vertex is 7, then the particle _desired_ to land
+                            at 6 but is moved to 7.
+        model_particles -- model array of model particles
+        bed_particles -- model array of bed particles
+        available_particles -- array of available vertices in the stream
+    
+    Returns:
+
+    """
     entrainment_dict = {}
     for particle in event_particles: 
         orig_x = model_particles[model_particles[:,3] == particle[3]][0][0]
@@ -717,14 +728,14 @@ def move_model_particles(event_particles, model_particles, bed_particles, availa
         entrainment_dict[particle[3]] = verified_hop
         model_particles[model_particles[:,3] == particle[3]] = particle
         
-        available_vertices = np.setdiff1d(available_vertices, list(entrainment_dict.values()))
+    available_vertices = np.setdiff1d(available_vertices, list(entrainment_dict.values()))
     
     return entrainment_dict, model_particles, available_vertices
     
 
 def find_closest_vertex(desired_hop, available_vertices):
     """ Find the closest (greater than or equal) available
-    vertex to the desired hop. 
+    vertex to the desired entrainment. 
     
     Keyword arguments:
     desired_hop -- float indicating the desired hop location
@@ -745,7 +756,27 @@ def find_closest_vertex(desired_hop, available_vertices):
 
 # TODO: confirm the naming of function
 def check_unique_entrainments(entrainment_dict):
-    nonunique_entrainments = []
+    """ Check that all entrainments in the dictionary are unqiue. 
+    
+    This function will flag any input with non-unique
+    entrainemnts. For a model with n entrainments, and k 
+    particles entraining at the same vertex, a list of k-1 particles 
+    will returned. The list represents those particles that 
+    should be re-entrained (forced to a different vertex).
+    
+    Keyword arguments:
+        entrainment_dict -- dictionary with key=id and value=vertex 
+                            particle (id) is being entrained at
+                            
+    Returns:
+        unique_flag -- boolean indicating if entrainment_dict had 
+                        only unique entrainments (true) or at 
+                        least one non-unique entrainemnt event (false)
+        redo_list -- list of particles to be re-entrained in order to
+                        achieve uniqueness. If unique_flag is True 
+                        then list will be returned empty
+    """
+    redo_list = []
     unique_flag = True
     # create defaultdict struct to avoid missing key errors while grouping
     entrainment_groups = defaultdict(list)
@@ -768,9 +799,9 @@ def check_unique_entrainments(entrainment_dict):
             print(stay_particle)
             for particle in p_id:
                 if particle != stay_particle[0]:
-                    nonunique_entrainments.append(int(particle))
+                    redo_list.append(int(particle))
         
-    return unique_flag, nonunique_entrainments     
+    return unique_flag, redo_list     
 
 
 # Taken from original model
