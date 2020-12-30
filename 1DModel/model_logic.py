@@ -3,7 +3,6 @@ import math
 import random
 import numpy as np
 import sympy as sy
-import time
 import copy
 import parameters # Import the parameters defined in the parameters file
 
@@ -390,7 +389,7 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
     left_support -- the left supporting particle
     right_support -- the right supporting particle
     """ 
-   
+    bad_search = False
     if already_placed: # only consider particle below current elevation
         considered_particles = model_particles[
                                     (model_particles[:,2] < particle[2])]
