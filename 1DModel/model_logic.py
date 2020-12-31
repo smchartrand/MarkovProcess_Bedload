@@ -411,7 +411,6 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
         bad_search = True
         print(f'\n\nERROR: no left supporting particles found at {left_center},'
               f'searching for an article at {particle[0]}\n\n')
-        raise ValueError
     
     right_candidates = all_particles[all_particles[:,0] == right_center]
     try:
