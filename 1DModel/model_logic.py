@@ -580,7 +580,7 @@ def run_entrainments(model_particles, bed_particles, event_particle_ids, lambda_
     while not unique_entrainments:
         redo_entrainments = model_particles[np.searchsorted(model_particles[:,3], redo_particle_ids)]
         entrainment_dict, model_particles, available_vertices = move_model_particles(redo_entrainments, model_particles, bed_particles, available_vertices)
-        unique_entrainments, redo_particles = check_unique_entrainments(entrainment_dict)
+        unique_entrainments, redo_particle_ids = check_unique_entrainments(entrainment_dict)
 
     model_particles = update_particle_states(model_particles, bed_particles)
     
@@ -715,15 +715,19 @@ def check_unique_entrainments(entrainment_dict):
         elif len(p_id) > 1:
             unique_flag = False
             nonunique_msg = (
-                f'More than one particle attempting to entrain at vertex: '
-                f'{vertex}... Randomly selecting one particle to remain, all ' 
+                f'Non-unique entrainment: The following particles attempted to entrain at vertex '
+                f'{vertex}: {p_id}. Randomly selecting one particle to remain, all ' 
                 f'others will be forced to the next available vertex.'
             )
             print(nonunique_msg)
-            stay_particle = random.sample(p_id, 1)
-            print(stay_particle)
+            stay_particle = random.sample(p_id, 1)[0]
+            unique_flag = False
+            nonunique_msg = (
+                f'Randomly selecting {stay_particle} to remain at {vertex}, all ' 
+                f'others will be forced to the next available vertex.'
+            )
             for particle in p_id:
-                if particle != stay_particle[0]:
+                if particle != stay_particle:
                     redo_list.append(int(particle))
         
     return unique_flag, redo_list     
