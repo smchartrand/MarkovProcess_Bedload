@@ -284,12 +284,11 @@ def place_particle(particle, particle_diam, model_particles,
     # solve the system of equations
     sol_dict = sy.solve((eq1, eq2), (x3, y3))
         
-    # iterate into the solution dictionary to recieve new particle center (x,y)
-    p_x = (sol_dict[1][0])
+    # Iterate into the solution dictionary to recieve new particle center (x,y)
+    # Rand round p_x to the nearest 10th (Take care of fp limitations)
+    p_x = round((sol_dict[1][0]), 1)
     p_y = (sol_dict[1][1])
     
-    np.format_float_positional(p_x, precision=2)
- 
     return p_x, p_y
 
 
