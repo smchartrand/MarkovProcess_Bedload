@@ -288,6 +288,7 @@ def place_particle(particle, particle_diam, model_particles,
     p_x = (sol_dict[1][0])
     p_y = (sol_dict[1][1])
     
+    np.format_float_positional(p_x, precision=2)
  
     return p_x, p_y
 
