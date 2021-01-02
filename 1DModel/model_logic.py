@@ -94,6 +94,8 @@ def get_event_particles(e_events, subregions, model_particles):
             print(msg)
 
         event_particles = event_particles + subregion_event_ids
+    event_particles = np.array(event_particles, dtype=np.intp)
+
         
     return event_particles
 
@@ -142,6 +144,7 @@ def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
         [2] = elevation,
         [3] = uid,
         [4] = active (boolean)
+        [5] = age counter
     
     Keyword arguments:
     diam -- diameter of the pa
@@ -152,9 +155,10 @@ def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
     
     center = pack_idx + (diam/2)
     state = 0
-
+    age = 0
     elevation = 0
-    bed_particles[particle_id] = [center, diam, elevation, pack_idx, state]
+    
+    bed_particles[particle_id] = [center, diam, elevation, pack_idx, state, age]
   
     # update build parameters
     pack_idx += diam
@@ -180,7 +184,7 @@ def build_streambed():
     bed_vertices -- list of available vertices 
                     based on bed list 
     """
-    bed_particles = np.zeros([parameters.max_particles, 5],dtype=float)
+    bed_particles = np.zeros([parameters.max_particles, 6],dtype=float)
     
     running_id = 0
     running_pack_idx = 0
@@ -445,6 +449,7 @@ def set_model_particles(bed_particles):
         [2] = elevation,
         [3] = uid,
         [4] = active (boolean)
+        [5] = age counter
     
     
     Keyword arguments:
@@ -461,7 +466,7 @@ def set_model_particles(bed_particles):
     # determine the number of model particles that should be introduced into the stream bed
     num_particles = determine_num_particles(parameters.Pack, num_vertices)
     # create an empty n-5 array to store model particle information
-    model_particles = np.zeros([num_particles, 5], dtype='float')
+    model_particles = np.zeros([num_particles, 6], dtype='float')
     
     #### FOR TESTING:
     chosen_vertex = np.zeros(num_particles)
@@ -496,7 +501,7 @@ def set_model_particles(bed_particles):
         
         model_particles[particle][0] = p_x
         model_particles[particle][2] = p_y
- 
+        model_particles[particle][5] = 0
 
     
     # update particle states so that supporting particles are inactive
@@ -582,6 +587,7 @@ def run_entrainments(model_particles, bed_particles, event_particle_ids, lambda_
         unique_entrainments, redo_particle_ids = check_unique_entrainments(entrainment_dict)
 
     model_particles = update_particle_states(model_particles, bed_particles)
+    model_particles = increment_age(model_particles, event_particle_ids)
     
     return model_particles
   
@@ -589,7 +595,7 @@ def run_entrainments(model_particles, bed_particles, event_particle_ids, lambda_
 def fathel_furbish_hops(event_particle_ids, model_particles, lambda_1):
     """ Given a list of particles
     """
-    event_particles = model_particles[np.searchsorted(model_particles[:,3], event_particle_ids)]
+    event_particles = model_particles[event_particle_ids]
     
     T_p_init1 = (np.random.uniform(parameters.T_pmin, parameters.T_pmax, 
                                    len(event_particle_ids)).reshape(1, len(event_particle_ids)))
@@ -715,22 +721,28 @@ def check_unique_entrainments(entrainment_dict):
             unique_flag = False
             nonunique_msg = (
                 f'Non-unique entrainment: The following particles attempted to entrain at vertex '
-                f'{vertex}: {p_id}. Randomly selecting one particle to remain, all ' 
-                f'others will be forced to the next available vertex.'
+                f'{vertex}: {p_id}.'
             )
             print(nonunique_msg)
             stay_particle = random.sample(p_id, 1)[0]
             unique_flag = False
-            nonunique_msg = (
+            stay_select = (
                 f'Randomly selecting {stay_particle} to remain at {vertex}, all ' 
                 f'others will be forced to the next available vertex.'
             )
+            print(stay_select)
             for particle in p_id:
                 if particle != stay_particle:
                     redo_list.append(int(particle))
         
     return unique_flag, redo_list     
 
+def increment_age(model_particles, e_event_ids):
+    
+    model_particles[:,5] = model_particles[:,5] + 1 
+    model_particles[e_event_ids, 5] = 0
+    
+    return model_particles
 
 # Taken from original model
 def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
