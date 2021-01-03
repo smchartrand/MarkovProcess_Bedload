@@ -291,7 +291,7 @@ def place_particle(particle, particle_diam, model_particles,
     # Iterate into the solution dictionary to recieve new particle center (x,y)
     # Rand round p_x to the nearest 10th (Take care of fp limitations)
     p_x = round((sol_dict[1][0]), 1)
-    p_y = (sol_dict[1][1])
+    p_y = round((sol_dict[1][1]), 1)
     
     return p_x, p_y
 
