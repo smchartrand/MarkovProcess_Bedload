@@ -6,6 +6,7 @@ import sympy as sy
 import copy
 import parameters # Import the parameters defined in the parameters file
 
+import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
 from collections import defaultdict
@@ -231,6 +232,7 @@ def determine_num_particles(pack_frac, num_vertices):
     
     num_particles = num_vertices * pack_frac
     num_particles = int(math.ceil(num_particles))
+    
     # num_particles = num_vertices - 1
 
     return num_particles
@@ -467,10 +469,6 @@ def set_model_particles(bed_particles):
     num_particles = determine_num_particles(parameters.Pack, num_vertices)
     # create an empty n-5 array to store model particle information
     model_particles = np.zeros([num_particles, 6], dtype='float')
-    
-    #### FOR TESTING:
-    chosen_vertex = np.zeros(num_particles)
-    ####
   
     for particle in range(num_particles):  
         
@@ -481,11 +479,7 @@ def set_model_particles(bed_particles):
             random_idx = random.randint(0, np.size(bed_vertices)-1)
         already_selected[random_idx] = True
         vertex = bed_vertices[random_idx]
-        
-        #### FOR TESTING: 
-        chosen_vertex[particle] = vertex
-        ####
-        
+
         # intialize the particle information
         model_particles[particle][0] = vertex
         model_particles[particle][1] = parameters.set_diam
@@ -508,16 +502,6 @@ def set_model_particles(bed_particles):
     model_particles = update_particle_states(model_particles, bed_particles)
     
     return model_particles
-
-
-# from: https://stackoverflow.com/questions/12427146/combine-two-arrays-and-sort
-def insort(a, b, kind='mergesort'):
-    # took mergesort as it seemed a tiny bit faster for my sorted large array try.
-    c = np.concatenate((a, b)) # we still need to do this unfortunatly.
-    c.sort(kind=kind)
-    flag = np.ones(len(c), dtype=bool)
-    np.not_equal(c[1:], c[:-1], out=flag[1:])
-    return c[flag]
 
 
 def compute_available_vertices(model_particles, bed_particles, lifted=False,
@@ -737,6 +721,7 @@ def check_unique_entrainments(entrainment_dict):
         
     return unique_flag, redo_list     
 
+
 def increment_age(model_particles, e_event_ids):
     
     model_particles[:,5] = model_particles[:,5] + 1 
@@ -752,7 +737,7 @@ def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
     for closer look at state of a subregion of the stream during simulation """
     plt.clf()
     fig = plt.figure(1)
-    fig.set_size_inches(10.5, 6.5)
+    fig.set_size_inches(15, 6.5)
     ax = fig.add_subplot(1, 1, 1, aspect='equal')
     # NOTE: xlim and ylim modified for aspec ratio -- WIP
     ax.set_xlim((-2, x_lim))
@@ -768,7 +753,7 @@ def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
     for x1, y1, r in zip(x_center, y_center_bed, radius_array):
         circle = Circle((x1, y1), r)
         patches.append(circle)
-    p = (PatchCollection(patches, color="#BDBDBD", alpha=0.9, linewidths=(0, )))
+    p = PatchCollection(patches, color="#BDBDBD", alpha=0.9, linewidths=(0, ))
     ax.add_collection(p)
     
     x_center_m = model_particles[:,0]
@@ -777,7 +762,8 @@ def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
     for x2, y2, r in zip(x_center_m, y_center_m, model_particles[:,1]/2):
         circle = Circle((x2, y2), r)
         patches1.append(circle)
-    p_m = (PatchCollection(patches1, facecolors='black', edgecolors='black'))
+    p_m = PatchCollection(patches1, cmap=matplotlib.cm.plasma_r, edgecolors='black')
+    p_m.set_array(model_particles[:,5])
     ax.add_collection(p_m)
     ### FOR TESTING: Plots the avaliable and chosen vertex lines 
     # uncomment for loop sections to draw the corresponding lines on figure
@@ -788,6 +774,7 @@ def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
 ##    for green in chosen_vertex:
 #        plt.axvline(x=green, color='g', linestyle='-')
     ### 
+    plt.colorbar(p_m)
     plt.title(f'Iteration {iteration}')
     if to_file:
         filename = f'iter_{iteration}.png'
@@ -795,4 +782,5 @@ def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
         plt.savefig(path)
     else:
         plt.show()
+        
     return
