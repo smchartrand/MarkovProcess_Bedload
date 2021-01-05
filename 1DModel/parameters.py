@@ -7,7 +7,7 @@ import math
 Pack = 0.52
 
 # Length of the domain in the streamwise direction in millimeters.
-x_max = 500
+x_max = 100
 
 # Spacing of nodes in millimeters.
 Grid_Spacing = 1
@@ -17,17 +17,20 @@ Grid_Spacing = 1
 #   min_diam = 4.0
 #   max_diam = 6.0 
 # IF CONSTANT DIAM USE THIS:
-set_diam = 5.0
+    
+# Grain size must be greater than > 1, and whole interger
+set_diam = 1.0
 set_radius = (set_diam / 2.0)
 
 # number of bed particles based on stream length
 max_particles = int(math.ceil( x_max / set_diam ))
-num_subregions = 4
+num_subregions = 2
+level_limit = 4
 
 
 ''' Model Run Parameters '''
 # number of model iterations  
-n_iterations = 100
+n_iterations = 300
 lambda_1 = 1
 
 # Particle travel time minimum (t).
