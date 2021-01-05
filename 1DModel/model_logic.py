@@ -537,7 +537,7 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     # https://stackoverflow.com/questions/26984414/
     elevations[::-1].sort()
     
-    for elevation in elevations:
+    for idx, elevation in enumerate(elevations):
         tmp_particles = all_particles[all_particles[:,2] == elevation]
         
         for particle in tmp_particles:    
@@ -546,6 +546,11 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
         right_vertices = tmp_particles[:,0] + parameters.set_radius
         left_vertices = tmp_particles[:,0] - parameters.set_radius
         tmp_shared_vertices = np.intersect1d(left_vertices, right_vertices)
+        
+        # Enforce level limit of piles:
+        if len(elevations)==parameters.level_limit+1 and idx==0: # +1 to account for the bed elevation:
+            for vertex in tmp_shared_vertices:
+                nulled_vertices.append(vertex)
         
         for vertex in tmp_shared_vertices:
             if vertex not in nulled_vertices:
@@ -737,7 +742,7 @@ def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
     for closer look at state of a subregion of the stream during simulation """
     plt.clf()
     fig = plt.figure(1)
-    fig.set_size_inches(15, 6.5)
+    fig.set_size_inches(20, 6.5)
     ax = fig.add_subplot(1, 1, 1, aspect='equal')
     # NOTE: xlim and ylim modified for aspec ratio -- WIP
     ax.set_xlim((-2, x_lim))
