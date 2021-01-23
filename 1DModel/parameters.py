@@ -19,7 +19,7 @@ Grid_Spacing = 1
 # IF CONSTANT DIAM USE THIS:
     
 # Grain size must be greater than > 1, and whole interger
-set_diam = 1.0
+set_diam = 0.5
 set_radius = (set_diam / 2.0)
 
 # number of bed particles based on stream length

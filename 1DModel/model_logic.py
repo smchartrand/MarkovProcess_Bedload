@@ -17,7 +17,7 @@ from matplotlib.patches import Circle
 def pause():
     programPause = input("Press the <ENTER> key to continue...")
     
-# TODO: refactor from class to simple struct (dict, maybe?)
+# TODO: This should probably be refactored from class to simple struct 
 class Subregion():
     """ Subregion class.
     
@@ -207,16 +207,6 @@ def build_streambed():
 
     return bed_particles, x_max
 
-
-def get_bed_vertices(bed_particles):
-    bed_vertices = np.zeros(parameters.x_max, dtype=bool)
-    bed_vertices[bed_particles[1:,3].astype(int)] = 1
-    # x-indexes of avaliable vertices to place model particles at
-    bed_vertices = np.transpose(np.nonzero(bed_vertices))
-    
-    return bed_vertices
-
-
 def bed_complete(pack_idx):
     """Check to see if bed is complete based on model params.""" 
     # similarly, if np.count_nonzero(bed_space) == x_max
@@ -225,23 +215,20 @@ def bed_complete(pack_idx):
     else: return 0
 
 #%% Bed is built. Place/create n particles in avaliable vertices
-##### NOTE: plot_stream SHOULD END UP IN ANOTHER SECTION. NOT APPRO HERE
 
 def determine_num_particles(pack_frac, num_vertices):
-    """ Return the number of model particles to be used in model."""
+    """Return the number of model particles to be used, based on 
+    the packing fraction"""
     
     num_particles = num_vertices * pack_frac
     num_particles = int(math.ceil(num_particles))
     
-    # num_particles = num_vertices - 1
 
     return num_particles
 
 
-def place_particle(particle, particle_diam, model_particles, 
-                   bed_particles):
+def place_particle(particle, particle_diam, model_particles, bed_particles):
     """ Calculate new X and Y of particle based on location in stream.
-    
     
     
     Provided a particle's (pA) location (xA) in stream, 
@@ -259,19 +246,8 @@ def place_particle(particle, particle_diam, model_particles,
     bed_particles -- bed particle list
     
     """
-    
-    #TODO: make sure 'find_neighbours' can never find itself
-    # find the two neighbours of the particle
-    left_support, right_support = find_supporting_particles_of(particle, 
-                                                        model_particles, 
-                                                        bed_particles,
-                                                        already_placed=False)
-    
-    # left_support, right_support = find_supporting_grid_particles(
-    #                                                     particle, 
-    #                                                     model_particles, 
-    #                                                     bed_particles,
-    #                                                     already_placed=False)
+    left_support, right_support = find_supports(particle, model_particles, 
+                                                bed_particles, already_placed=False)
     # TODO: make this prettier/more readable
     x1 = left_support[0]
     y1 = left_support[2]
@@ -282,8 +258,6 @@ def place_particle(particle, particle_diam, model_particles,
     r2 = right_support[1] / 2
     
     rp = particle_diam / 2 
-    
-    #print(f'Calculating placement using elevations {y1} and {y2}')
     
     # define symbols for symbolic system solution using SymPy
     x3, y3 = sy.symbols('x3 y3')
@@ -296,9 +270,9 @@ def place_particle(particle, particle_diam, model_particles,
     sol_dict = sy.solve((eq1, eq2), (x3, y3))
         
     # Iterate into the solution dictionary to recieve new particle center (x,y)
-    # Rand round p_x to the nearest 10th (Take care of fp limitations)
-    p_x = round((sol_dict[1][0]), 1)
-    p_y = round((sol_dict[1][1]), 1)
+    # Account for 'extra precision' differences by rounding to nearest 100th
+    p_x = round((sol_dict[1][0]), 2)
+    p_y = round((sol_dict[1][1]), 2)
     
     return p_x, p_y
 
@@ -325,70 +299,49 @@ def update_particle_states(model_particles, bed_particles):
     bed_particles -- bed particle list
     
     """
-    
-    for particle in model_particles:
-        #TODO: enumerate this somehow
-        set_state(particle, 1)
-        
+    # Set all model particles to active
+    model_particles[:,4] = 1
     in_stream_particles = model_particles[model_particles[:,0] != -1]
-    for particle in in_stream_particles:
-        
-        left_neighbour, right_neighbour = find_supporting_particles_of(
-                                                        particle, 
+    for particle in in_stream_particles:     
+        left_neighbour, right_neighbour = find_supports(particle, 
                                                         model_particles, 
                                                         bed_particles,
                                                         already_placed=True)
         
-        # left_neighbour, right_neighbour = find_supporting_grid_particles(
-        #                                                 particle, 
-        #                                                 model_particles, 
-        #                                                 bed_particles,
-        #                                                 already_placed=True)
-            
         # note: this method below could be improved if find_neighbours_of 
         # would indicate if a neighbour belongs to the model or bed particles
         if left_neighbour[2] > 0 and left_neighbour[2] < particle[2]:
             lmodel_index = np.where(model_particles[:,3] == left_neighbour[3])
-            model_particles[lmodel_index] = set_state(model_particles[lmodel_index][0], 0)
+            lsupport_id = lmodel_index[0][0]
+            model_particles[lsupport_id][4] = 0
         else:
             continue
                  
         if right_neighbour[2] > 0 and right_neighbour[2] < particle[2]:
             rmodel_index = np.where(model_particles[:,3] == right_neighbour[3])
-            model_particles[rmodel_index] = set_state(model_particles[rmodel_index][0], 0)
+            rsupport_id = rmodel_index[0][0]
+            model_particles[rsupport_id][4] = 0
         else:
             continue
     
     return model_particles
         
-
-def set_state(particle, status):
-    """ Set particle state to desired status."""
-    particle[4] = status
-    #print(f'Particle {particle[3]} set to {status} (1=active, 0=inactive)')
-    return particle
-
     
-def find_supporting_particles_of(particle, model_particles, bed_particles,
-                                 already_placed):
+def find_supports(particle, model_particles, bed_particles, already_placed):
     """ Find the 2 supporting particles for a given particle.
     
-    Provided a particle (numpy array selection), this
-    function will search the stream for particles
-    that could be considered 'supporting' particles.
+    Provided a particle struct (1-5 array), this function 
+    will search the stream for particles that could be 
+    considered 'supporting' particles.
     
-    A supporting particle is a particle that is placed
-    directly below our particle of concern. Supporting
-    particles are those particles which 'hold up' the
-    particle of concern.
+    More generally, supporting particles are those 
+    particles which 'hold up' the particle of concern.
     
     This function can search for supporting particles
-    in two scenarios:
-        1. The particles is already placed/set in 
-        the stream.
+    within two scenarios:
+        1. The particle of concern is already placed.
         2. The particles is looking to be placed 
-        in the stream at it's defined x-location (i.e
-        after an entrainment event)
+        in the stream (i.e after an entrainment event)
     
     Searching for supporting particles at location x could 
     result in two different results depending on the 
@@ -427,7 +380,7 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
     except ValueError:
         bad_search = True
         print(f'\n\nERROR: no left supporting particles found at {left_center},'
-              f'searching for an article at {particle[0]}\n\n')
+              f'searching for a particle at {particle[0]}\n\n')
     
     right_candidates = all_particles[all_particles[:,0] == right_center]
     try:
@@ -442,70 +395,6 @@ def find_supporting_particles_of(particle, model_particles, bed_particles,
 
     return left_support[0], right_support[0]
 
-
-def find_supporting_grid_particles(particle, model_particles, bed_particles,
-                                 already_placed):
-    """ Supporting particle search for grid implementation.
-    
-    Keyword arguments:   
-    particle -- array representing a particle 
-    model_particles -- model particle list
-    bed_particles -- bed particle list
-    already_placed -- boolean flag indicating if particle has
-                      already been placed in the stream, or
-                      is looking to be placed
-    
-    Returns:
-    left_support -- the left supporting particle
-    right_support -- the right supporting particle
-    """ 
-    print(f'Searching for {particle[0]}')
-    bad_search = False
-    if already_placed: # only consider particle below current elevation
-        considered_particles = model_particles[
-                                    (model_particles[:,2] < particle[2])]
-        all_particles = np.concatenate((considered_particles, 
-                                               bed_particles), axis=0)
-    else:
-        all_particles = np.concatenate((model_particles, 
-                                               bed_particles), axis=0)
-    print(all_particles)
-    left_candidates = all_particles[all_particles[:,0] < particle[0]] 
-    left_candidates = left_candidates[left_candidates[:,0] > (particle[0]-particle[1])]
-    try:
-        print(f'max: {np.max(left_candidates[:,2])}')
-        left_candidates = left_candidates
-        left_candidates = left_candidates[left_candidates[:,2] 
-                                        == np.max(left_candidates[:,2])]
-        print(f'max: {np.max(left_candidates[:,0])}')
-        left_support = left_candidates[left_candidates[:,0] 
-                                       == np.max(left_candidates[:,0])]
-        print(f'final choice L: {left_support}')
-    except ValueError:
-        bad_search = True
-        print(f'\n\nERROR: no left supporting particles found for,'
-              f'particle {particle[3]} at {particle[0]}\n\n')
-    
-    right_candidates = all_particles[all_particles[:,0] > particle[0]]
-    right_candidates = right_candidates[right_candidates[:,0] < particle[0]+particle[1]]
-    try: 
-        print(f'max: {np.max(right_candidates[:,2])}')
-        # right_candidates = right_candidates[right_candidates[:,2]
-        #                             == np.max(right_candidates[:,2])]
-        print(f'min: {np.max(right_candidates[:,0])}')
-        right_support = right_candidates[right_candidates[:,0]
-                                    == np.min(right_candidates[:,0])]
-        print(f'final choice R: {right_support}')
-    except ValueError:
-        bad_search = True
-        print(f'\n\nERROR: No right supporting particles found for,'
-              f'particle {particle[3]} at {particle[0]}\n\n')
-    if bad_search:
-        raise ValueError(f'Supporting particles for particle {particle[3]} not found in model_particles')
-
-    del(all_particles)
-
-    return left_support[0], right_support[0]
 
 ##TODO: extract into create and set functions
 def set_model_particles(bed_particles):
@@ -535,26 +424,21 @@ def set_model_particles(bed_particles):
     bed_particles -- bed particle list
     
      """
-
-    bed_vertices = get_bed_vertices(bed_particles)
-    # create a boolean area representing the avaliability of the vertices
-    num_vertices = np.size(bed_vertices)
-    already_selected = [False] * num_vertices
     
+    available_vertices = compute_available_vertices([], bed_particles, just_bed=True)    
+    num_placement_loc = np.size(available_vertices)
     # determine the number of model particles that should be introduced into the stream bed
-    num_particles = determine_num_particles(parameters.Pack, num_vertices)
-    # create an empty n-5 array to store model particle information
+    num_particles = determine_num_particles(parameters.Pack, num_placement_loc)
+    # create an empty n-6 array to store model particle information
     model_particles = np.zeros([num_particles, 6], dtype='float')
   
     for particle in range(num_particles):  
         
         # the following lines select a vertex to place the current particle at, 
         # and ensure that it is not already occupied by another particle
-        random_idx = random.randint(0, np.size(bed_vertices)-1)
-        while already_selected[random_idx]:
-            random_idx = random.randint(0, np.size(bed_vertices)-1)
-        already_selected[random_idx] = True
-        vertex = bed_vertices[random_idx]
+        random_idx = random.randint(0, np.size(available_vertices)-1)
+        vertex = available_vertices[random_idx]
+        available_vertices = available_vertices[available_vertices != vertex]
 
         # intialize the particle information
         model_particles[particle][0] = vertex
@@ -580,7 +464,7 @@ def set_model_particles(bed_particles):
 
 
 def compute_available_vertices(model_particles, bed_particles, lifted=False,
-                               lifted_particles=None):
+                               lifted_particles=None, just_bed=False):
     """ Compute the avaliable vertices in the model stream.
 
     #TODO: update desc and keyword to outline the logic of computation
@@ -598,17 +482,20 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     # If we are lifting particles, we need to consider the subset of particles
     # that includes every particles _except_ the particles being 
     if lifted == True:
+        # TODO: Unecessary deepcopy. Refactor to mask or something else.
         model_particles_lifted = copy.deepcopy(model_particles)   
         model_particles_lifted = np.delete(model_particles_lifted, 
                                            lifted_particles, 0)
         all_particles = np.concatenate((model_particles_lifted, 
                                         bed_particles), axis=0)
+    elif just_bed == True:
+        all_particles = bed_particles;
     else:    
         all_particles = np.concatenate((model_particles, 
                                         bed_particles), axis=0)
     
     elevations = np.unique(all_particles[:,2])
-    # sort elevation in descending order
+    # Sort elevations in descending order. Logic from:
     # https://stackoverflow.com/questions/26984414/
     elevations[::-1].sort()
     
@@ -623,7 +510,7 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
         tmp_shared_vertices = np.intersect1d(left_vertices, right_vertices)
         
         # Enforce level limit of piles:
-        if len(elevations)==parameters.level_limit+1 and idx==0: # +1 to account for the bed elevation:
+        if len(elevations)==parameters.level_limit+1 and idx==0: 
             for vertex in tmp_shared_vertices:
                 nulled_vertices.append(vertex)
         
@@ -637,25 +524,7 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     available_vertices = np.array(avail_vertices)
     
     return available_vertices
-
-def compute_grid_vertices():
-    """ Compute the avaliable vertices in the model stream.
-
-    #TODO: update desc and keyword to outline the logic of computation
     
-    Keyword arguments: 
-    model_particles    -- list of model particles
-    bed_particles      -- list of bed particles
-    lifted             -- boolean flag indicating if calculation should 
-                          calculate using 'lifted' vertice. Default False
-    lifted_particles   -- idx of the 'lifted' particles. Default None
-    """
-    
-    grid_vertices = np.arange(0, parameters.x_max-0.1, 0.1)
-    
-    return grid_vertices
-
-
 def run_entrainments(model_particles, bed_particles, event_particle_ids, lambda_1):
     # compute available vertices for this iteration, lifting event particles
     available_vertices = compute_available_vertices(model_particles, bed_particles, lifted=True, lifted_particles=event_particle_ids)
@@ -705,24 +574,22 @@ def fathel_furbish_hops(event_particle_ids, model_particles, lambda_1):
     return event_particles
  
        
-
- 
-       
 def move_model_particles(event_particles, model_particles, bed_particles, available_vertices):
     """ Given an array of particles, move them to next closest valid vertex
-    within the model stream.
+    within the model stream and update model_particle array accordingly.
 
     Keyword arguments:
-        event_particles -- list of particles to be moved in stream, index 0
-                            should represent the desired entrainment location
-                            i.e if particle[0] = 6 and the closest available 
-                            vertex is 7, then the particle _desired_ to land
-                            at 6 but is moved to 7.
-        model_particles -- model array of model particles
-        bed_particles -- model array of bed particles
-        available_particles -- array of available vertices in the stream
+        event_particles -- list of event particles (particles being moved in entrainment)
+        model_particles -- ndarray of model particles
+        bed_particles -- ndarray of bed particles
+        available_particles -- ndarray of available vertices in the stream
     
     Returns:
+        entrainment_dict -- dictionary recording the event particle movements using
+                            (particle_id, entrainment_location) key-value pair
+        model_particles -- updated model particle array 
+        available_vertices
+        particle_flux
 
     """
     entrainment_dict = {}
@@ -760,11 +627,11 @@ def move_model_particles(event_particles, model_particles, bed_particles, availa
     
 
 def find_closest_vertex(desired_hop, available_vertices):
-    """ Find the closest (greater than or equal) available
-    vertex to the desired entrainment. 
+    """ Find the closest downstream (greater than or equal) vertex
+    in availbale vertices. If nothing exists, then return -1.
     
     Keyword arguments:
-    desired_hop -- float indicating the desired hop location
+    desired_hop -- float representing the desired hop location
     available_location -- np array of available vertices in model
     
     Returns:
@@ -835,6 +702,7 @@ def check_unique_entrainments(entrainment_dict):
 
 
 def increment_age(model_particles, e_event_ids):
+    """"Increment model particles' age, set event particles to age 0"""
     
     model_particles[:,5] = model_particles[:,5] + 1 
     model_particles[e_event_ids, 5] = 0
