@@ -31,7 +31,7 @@ for iteration in range(pm.n_iterations):
                                 e_events=len(event_particles), 
                                 particles=event_particles))     
     
-    model_particles, particle_flux = ml.run_entrainments(model_particles, bed_particles, event_particles, pm.lambda_1)
+    model_particles, particle_flux = ml.run_entrainments(model_particles, bed_particles, event_particles, pm.normal_dist)
     particle_flux_dict[iteration] = particle_flux
     particle_flux_list.append(particle_flux)
     

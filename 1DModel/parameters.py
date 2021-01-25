@@ -24,18 +24,20 @@ set_radius = (set_diam / 2.0)
 
 # number of bed particles based on stream length
 max_particles = int(math.ceil( x_max / set_diam ))
-num_subregions = 4
+num_subregions = 2
 level_limit = 4
 
 
 ''' Model Run Parameters '''
 # number of model iterations  
-n_iterations = 400
+n_iterations = 200
 lambda_1 = 1
 
 # Particle travel time minimum (t).
 T_pmin = 0
 # Particle travel time maximum (t).
 T_pmax = 1.0
+
+normal_dist=True
 
 
