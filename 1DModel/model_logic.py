@@ -132,6 +132,7 @@ def define_subregions(bed_length, num_subregions):
     
     return subregions_arr
      
+
 def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
     """ Add 'particle' to the bed particle list.
     
@@ -251,7 +252,7 @@ def place_particle(particle, particle_diam, model_particles, bed_particles):
     """
     left_support, right_support = find_supports(particle, model_particles, 
                                                 bed_particles, already_placed=False)
-    # TODO: make this prettier/more readable
+    # TODO: Make this more readable
     x1 = left_support[0]
     y1 = left_support[2]
     r1 = left_support[1] / 2
@@ -473,7 +474,7 @@ def set_model_particles(bed_particles):
     return model_particles
 
 
-def compute_available_vertices(model_particles, bed_particles, lifted=False,
+def compute_available_vertices(model_particles, bed_particles, 
                                lifted_particles=None, just_bed=False):
     """ Compute the avaliable vertices in the model 
     stream.
@@ -484,8 +485,6 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     Keyword arguments: 
     model_particles -- list of model particles
     bed_particles -- list of bed particles
-    lifted -- flag to detemine if lifted_particles param 
-                should be used or not. Default False
     lifted_particles  -- idx of the 'lifted' particles. Default None
     """
     nulled_vertices = []
@@ -493,7 +492,7 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     
     # If we are lifting particles, we need to consider the subset of particles
     # that includes every particles _except_ the particles being 
-    if lifted == True:
+    if lifted_particles is not None:
         # TODO: Unecessary deepcopy. Refactor to mask or something else.
         model_particles_lifted = copy.deepcopy(model_particles)   
         model_particles_lifted = np.delete(model_particles_lifted, 
@@ -537,8 +536,8 @@ def compute_available_vertices(model_particles, bed_particles, lifted=False,
     
     return available_vertices
     
-#TODO: Parametrization of uniqueness method. User should be able to play 
-# around with whether unique entrainments are forced pre- or post-event
+#TODO: Parametrize uniqueness method. User should be able to play 
+# with whether unique entrainments are forced pre- or post-event
 def run_entrainments(model_particles, bed_particles, event_particle_ids, normal_flag):
     """ This function mimics an 'entrainment event' through
     calls to the entrainment-related functions. 
@@ -557,8 +556,7 @@ def run_entrainments(model_particles, bed_particles, event_particle_ids, normal_
         particle_flux -- number (int) of particles which 
                             passed the downstream boundary
     """
-    avail_vertices = compute_available_vertices(model_particles, bed_particles, 
-                                                lifted=True, lifted_particles=event_particle_ids)
+    avail_vertices = compute_available_vertices(model_particles, bed_particles, lifted_particles=event_particle_ids)
     unverified_e = fathel_furbish_hops(event_particle_ids, model_particles, 
                                        normal=normal_flag)
     e_dict, p_flux_1, model_particles, avail_vertices = move_model_particles(
@@ -608,7 +606,6 @@ def fathel_furbish_hops(event_particle_ids, model_particles, normal=False):
     """
     event_particles = model_particles[event_particle_ids]
     if normal:
-        print('\n\n Running Normal! \n\n')
         mu, sigma = 5, 1 # mean and standard deviation 5 and 1 are good for normal
         s = np.random.normal(mu, sigma, len(event_particle_ids))
     else:

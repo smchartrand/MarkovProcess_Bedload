@@ -18,8 +18,8 @@ Grid_Spacing = 1
 #   max_diam = 6.0 
 # IF CONSTANT DIAM USE THIS:
     
-# Grain size must be greater than > 1, and whole interger
-set_diam = 0.5
+# Grain size (mm) 
+set_diam = 1
 set_radius = (set_diam / 2.0)
 
 # number of bed particles based on stream length
@@ -30,7 +30,7 @@ level_limit = 4
 
 ''' Model Run Parameters '''
 # number of model iterations  
-n_iterations = 200
+n_iterations = 100
 lambda_1 = 1
 
 # Particle travel time minimum (t).
@@ -38,6 +38,6 @@ T_pmin = 0
 # Particle travel time maximum (t).
 T_pmax = 1.0
 
-normal_dist=True
+normal_dist=False
 
 
