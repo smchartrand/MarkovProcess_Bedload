@@ -12,14 +12,15 @@ from matplotlib.collections import PatchCollection
 from collections import defaultdict
 from matplotlib.patches import Circle
 
+#TODO: Refactor functions so that they don't reach into the paramters file
     
-# TODO: This probably doesn't need to be a class 
+# TODO: Consider refactoring from class into simple struct (NumPy?)
 class Subregion():
     """ Subregion class.
     
     Each instance of Subregion contains
-    the name, left and right boundaries 
-    of a subregion. 
+    the name, and the left and right 
+    boundaries of a subregion. 
     
     Name and boundaries are set during 
     instantiation and can be retrieved
@@ -102,16 +103,13 @@ def get_event_particles(e_events, subregions, model_particles):
 def define_subregions(bed_length, num_subregions):
     """ Define subregion list for model stream.
     
-    Subregion list will contain Subregion objects, 
-    identifying the boundaries of the num_subregions.
-    
 
     Keyword arguments:
     bed_length -- The length of the model bed.
     subregions -- The number of subregions to create.
 
     Returns:
-    subregions_arr -- The np array of subregions
+    subregions_arr -- The np array of Subregions
 
     """
     assert(math.remainder(bed_length, num_subregions) == 0)
@@ -128,7 +126,9 @@ def define_subregions(bed_length, num_subregions):
     
     return subregions_arr
      
-
+# TODO: Does this need it's own function? 
+# Possibly merge model and bed particle builders into single particle 
+# array builder func. This could aid maintainace/change of the arrays
 def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
     """ Add 'particle' to the bed particle list.
     
@@ -552,7 +552,8 @@ def run_entrainments(model_particles, bed_particles, event_particle_ids, normal_
         particle_flux -- number (int) of particles which 
                             passed the downstream boundary
     """
-    avail_vertices = compute_available_vertices(model_particles, bed_particles, lifted_particles=event_particle_ids)
+    avail_vertices = compute_available_vertices(model_particles, bed_particles, 
+                                                lifted_particles=event_particle_ids)
     unverified_e = fathel_furbish_hops(event_particle_ids, model_particles, 
                                        normal=normal_flag)
     e_dict, p_flux_1, model_particles, avail_vertices = move_model_particles(
@@ -753,7 +754,9 @@ def increment_age(model_particles, e_event_ids):
 
 # End entrainment and model particle related functions
 #%% Plotting functions
-# Taken from original model
+
+# TODO: Move plotting into different file.
+# Note: This code was taken from original model. Credit: Dr. Shawn Chartrand.
 def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
                 available_vertices, to_file):
     """ Plot the complete stream from 0,0 to x_lim and y_lim. Bed particles 

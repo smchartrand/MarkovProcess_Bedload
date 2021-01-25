@@ -35,7 +35,7 @@ for iteration in range(pm.n_iterations):
     particle_flux_dict[iteration] = particle_flux
     particle_flux_list.append(particle_flux)
     
-    ### FOR TESTING re-calculate avail vertice for plotting
+    # Re-calculate avail vertice for plotting. Can be 
     available_vertices = ml.compute_available_vertices(model_particles, 
                                                        bed_particles)
     ml.plot_stream(iteration, bed_particles, model_particles, pm.x_max, 10, 
