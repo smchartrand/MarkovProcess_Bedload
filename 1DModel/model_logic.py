@@ -12,10 +12,6 @@ from matplotlib.collections import PatchCollection
 from collections import defaultdict
 from matplotlib.patches import Circle
 
-
-# FOR TESTING: 
-def pause():
-    programPause = input("Press the <ENTER> key to continue...")
     
 # TODO: This probably doesn't need to be a class 
 class Subregion():
