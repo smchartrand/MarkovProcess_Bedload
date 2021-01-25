@@ -17,7 +17,7 @@ from matplotlib.patches import Circle
 def pause():
     programPause = input("Press the <ENTER> key to continue...")
     
-# TODO: This should probably be refactored from class to simple struct 
+# TODO: This should probably doesn't need to be a class 
 class Subregion():
     """ Subregion class.
     
@@ -50,7 +50,7 @@ def get_event_particles(e_events, subregions, model_particles):
     Keyword arguments:
     e_events -- Number of events requested per subregion 
     subregions -- List of Subregion objects
-    model_particles -- The Model's model_particles array 
+    model_particles -- The model's model_particles array 
 
     Returns:
     total_e_events -- Number of events over entire stream
@@ -102,7 +102,10 @@ def get_event_particles(e_events, subregions, model_particles):
 
 
 def define_subregions(bed_length, num_subregions):
-    """ Define subregions list.
+    """ Define subregion list for model stream.
+    
+    Subregion list will contain Subregion objects, 
+    identifying the boundaries of the num_subregions.
     
 
     Keyword arguments:
@@ -359,39 +362,49 @@ def find_supports(particle, model_particles, bed_particles, already_placed):
     left_support -- the left supporting particle
     right_support -- the right supporting particle
     """ 
-    bad_search = False
-    if already_placed: # only consider particle below current elevation
+     # Define location where left and right supporting particles could sit.
+     # Note: This limits the model to only using same-sized grains.
+    left_center = particle[0] - (parameters.set_radius)
+    right_center = particle[0] + (parameters.set_radius)
+    
+    # If particle is already placed in the stream, then supporting particles
+    # can only exist below the particle's current elevation (particle[2])
+    if already_placed: 
         considered_particles = model_particles[
                                     (model_particles[:,2] < particle[2])]
         all_particles = np.concatenate((considered_particles, 
-                                               bed_particles), axis=0)
+                                                 bed_particles), axis=0)
+    # If particle is not yet places (i.e suspended in stream during the 
+    # entrainment event) then all elevations can be considered for supports.
     else:
         all_particles = np.concatenate((model_particles, 
                                                bed_particles), axis=0)
-        
-    # look for particles with center R (radius) away from particle_idx 
-    left_center = particle[0] - (parameters.set_radius)
-    right_center = particle[0] + (parameters.set_radius)
    
-    left_candidates = all_particles[all_particles[:,0] == left_center]
+    l_candidates = all_particles[all_particles[:,0] == left_center]
     try:
-        left_support = left_candidates[left_candidates[:,2] 
-                                       == np.max(left_candidates[:,2])]
+        left_support = l_candidates[l_candidates[:,2] 
+                                    == np.max(l_candidates[:,2])]
     except ValueError:
-        bad_search = True
-        print(f'\n\nERROR: no left supporting particles found at {left_center},'
-              f'searching for a particle at {particle[0]}\n\n')
-    
-    right_candidates = all_particles[all_particles[:,0] == right_center]
+        error_msg = (
+                     f'\n\nERROR: No left supporting particle found for'
+                     f'particle {particle[3]}, searched for support at'
+                     f'{left_center}\n\n'
+        )
+        print(error_msg)
+        raise
+        
+    r_candidates = all_particles[all_particles[:,0] == right_center] 
     try:
-        right_support = right_candidates[right_candidates[:,2]
-                                    == np.max(right_candidates[:,2])]
+        right_support = r_candidates[r_candidates[:,2] 
+                                     == np.max(r_candidates[:,2])]
     except ValueError:
-        bad_search = True
-        print(f'\n\nERROR: No right supporting particles found at {right_center},'
-              f'searching for an article at {particle[0]}\n\n')
-    if bad_search:
-        raise ValueError(f'Supporting particles for particle {particle[3]} not found in model_particles')
+        error_msg = (
+                     f'\n\nERROR: No right supporting particle found for'
+                     f'particle {particle[3]}, searched for support at'
+                     f'{right_center}\n\n'
+        )
+        print(error_msg)
+        raise
 
     return left_support[0], right_support[0]
 
