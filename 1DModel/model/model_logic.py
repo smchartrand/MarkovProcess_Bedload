@@ -13,7 +13,6 @@ from collections import defaultdict
 from matplotlib.patches import Circle
 
 
-    
 # TODO: Consider refactoring from class into simple struct 
 class Subregion():
     """ Subregion class.
@@ -126,9 +125,9 @@ def define_subregions(bed_length, num_subregions):
     
     return subregions_arr
      
-# TODO: This does not need to be it's own function 
-# Possibly merge model and bed particle array builders into func. 
-# This could aid maintainace/change of the array structure
+# TODO: This does not need to be an independant function 
+# Should merge model and bed particle array builders into one. 
+# This could aid maintainace/change of the array structure.
 def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
     """ Add 'particle' to the bed particle list.
     
@@ -142,7 +141,7 @@ def add_bed_particle(diam, bed_particles, particle_id, pack_idx):
         [0] = center coordinate,
         [1] = diameter,
         [2] = elevation,
-        [3] = uid,
+        [3] = pack_idx,
         [4] = active (boolean)
         [5] = age counter
     
@@ -189,6 +188,7 @@ def build_streambed():
     
     running_id = 0
     running_pack_idx = 0
+    # This probably doesn't need to be a loop. NumPy! 
     while True:
         running_id, running_pack_idx = add_bed_particle(parameters.set_diam, 
                                                         bed_particles, 
@@ -198,10 +198,19 @@ def build_streambed():
             break
         else: continue
     
-    # bed can be packed +/- from the default x_max depending on the 
-    # packing pattern -- therefore update x_max once bed is complete to new +- 8mm size
-    x_max = int(math.ceil(bed_particles[running_id-1][1]+ bed_particles[running_id-1][3]))
-    # strip zero element particles tuples
+    # Bed packing does not always match x_max. Adjust if off
+    bed_max = int(math.ceil(bed_particles[running_id-1][1] 
+                            + bed_particles[running_id-1][3]))
+    if parameters.x_max != bed_max:
+        msg = (
+            f'\nBed packing could not match x_max parameter... Updating '
+            f'x_max to match packing extent: {bed_max}. This could '
+            f'effect validity of num_subregions parameter'
+        )
+        print(msg)
+        x_max = bed_max
+    else: x_max = parameters.x_max
+    # strip zero element particles tuples from the original array
     valid = ((bed_particles==0).all(axis=(1)))
     bed_particles = bed_particles[~valid]
 
@@ -821,9 +830,51 @@ def plot_stream(iteration, bed_particles, model_particles, x_lim, y_lim,
     plt.title(f'Iteration {iteration}')
     if to_file:
         filename = f'iter{iteration}.png'
-        plots_path = 'plots/' + filename
+        plots_path = '../plots/' + filename
         plt.savefig(plots_path)
     else:
         plt.show()
         
     return
+
+
+def validate_parameters():
+    """ A quick and dirty check of 
+    parameters for crash-able violations.
+
+    Raises:
+    ------
+    TypeError -- Invalid param type
+    ValueError -- Invalid param value
+
+    """ 
+    if parameters.Pack <= 0:
+        raise ValueError('Pack <=0. Pack fraction must be greater than 0')
+    
+    if parameters.x_max <= 0:
+        raise ValueError('x_max <=0. \
+                         The stream must be longer than 0mm long')
+        # Print violation message for x_mx
+    if parameters.set_diam <= 0:
+        raise ValueError('set_diam <= 0. \
+                         A grain must have a diameter greater than 0')
+    
+    if (math.remainder(parameters.x_max, parameters.num_subregions) != 0):
+        raise ValueError('X_max must be divisible by the number of subregions')
+        
+    if type(parameters.num_subregions) != int:
+        raise TypeError('num_subregions needs to be Integer')
+    
+    if parameters.n_iterations < 0:
+        raise ValueError('n_iterations is negative. \
+                         Cannot run negative number of iterations')
+        
+    if type(parameters.n_iterations) != int:
+        raise TypeError('n_iterations needs to be Integer')
+    
+    if parameters.T_pmin > parameters.T_pmax:
+        raise ValueError('T_pmin cannot be larger than T_pmax')
+    
+    if type(parameters.normal_dist) != bool:
+        raise TypeError('normal_dist needs to be Boolean')
+    

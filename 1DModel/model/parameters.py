@@ -9,13 +9,14 @@ the values that have been tested
 for it. 
 
 Most parameters have suggested ranges
-for input to stay within. If the user
-selects beyond the range they will 
-be asked to confirm before the 
-model runs, or in some cases the
-model will not run.
+for input to stay within. If thes user
+selects beyond the strict ranges or
+sets to an incorrect type
+the model will not run.
 
-
+Note: this file will hopefully be 
+converted to a YML in future 
+iterations of the model.
 """
 
 #%% Mutable parameters.
@@ -31,7 +32,7 @@ Pack = 0.52
 x_max = 100
     
 # Grain diameter (mm) 
-# RANGE: > 0.1
+# RANGE: > 0
 # TESTED: 0.5, 1.0, 1.5, 2.0
 set_diam = 1
 
@@ -43,7 +44,7 @@ num_subregions = 2
 
 # The maximum number of levels permitted in stream
 # TESTED: 2, 3, 4, 5,
-level_limit = 4.5
+level_limit = 4
 
 # The number of iterations to run
 # RANGE: > 0
