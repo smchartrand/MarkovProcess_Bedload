@@ -852,12 +852,10 @@ def validate_parameters():
         raise ValueError('Pack <=0. Pack fraction must be greater than 0')
     
     if parameters.x_max <= 0:
-        raise ValueError('x_max <=0. \
-                         The stream must be longer than 0mm long')
-        # Print violation message for x_mx
+        raise ValueError('x_max <=0. The stream must be longer than 0mm long')
+
     if parameters.set_diam <= 0:
-        raise ValueError('set_diam <= 0. \
-                         A grain must have a diameter greater than 0')
+        raise ValueError('set_diam <= 0. A grain must have a diameter greater than 0')
     
     if (math.remainder(parameters.x_max, parameters.num_subregions) != 0):
         raise ValueError('X_max must be divisible by the number of subregions')
@@ -866,8 +864,7 @@ def validate_parameters():
         raise TypeError('num_subregions needs to be Integer')
     
     if parameters.n_iterations < 0:
-        raise ValueError('n_iterations is negative. \
-                         Cannot run negative number of iterations')
+        raise ValueError('n_iterations is negative. Cannot run negative number of iterations')
         
     if type(parameters.n_iterations) != int:
         raise TypeError('n_iterations needs to be Integer')
