@@ -5,14 +5,14 @@ import numpy as np
 import sympy as sy
 import copy
 import parameters # Import the parameters defined in the parameters file
-
+#TODO: Refactor functions so that they don't reach into the paramters file
 import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.collections import PatchCollection
 from collections import defaultdict
 from matplotlib.patches import Circle
 
-#TODO: Refactor functions so that they don't reach into the paramters file
+
     
 # TODO: Consider refactoring from class into simple struct 
 class Subregion():
@@ -476,13 +476,28 @@ def compute_available_vertices(model_particles, bed_particles,
     """ Compute the avaliable vertices in the model 
     stream.
 
-    #TODO: update desc and keyword to outline the logic 
-    of computation
+    Identifies the distinct elevations 
+    present in the stream then looks at groups of
+    particles in decesnding order of their elevation. 
+    
+    For each group, if a particle is sitting on a vertex
+    x, then x is added to the nulled_vertices array. 
+    Then vertices created by two particles in the group
+    are considered, where v is the set of such vertices. 
+    If v is not already in nulled_vertices, then it is 
+    added to the available_vertices.
+    
+    This ends once the bed particles (lowest elev) have 
+    been considered.
+    
     
     Keyword arguments: 
-    model_particles -- list of model particles
-    bed_particles -- list of bed particles
-    lifted_particles  -- idx of the 'lifted' particles. Default None
+        model_particles -- list of model particles
+        bed_particles -- list of bed particles
+        lifted_particles  -- idx of the 'lifted' particles. Default None
+    
+    Returns:
+        available_vertices -- the set of available vertices
     """
     nulled_vertices = []
     avail_vertices = []
