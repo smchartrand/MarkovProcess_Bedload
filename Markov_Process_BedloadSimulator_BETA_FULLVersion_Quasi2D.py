@@ -22,7 +22,7 @@ Start_time = time.time()
 # This code was developed by Shawn Chartrand and David Furbish, March 2018.
 # The code is the basis of Markov birth-death simulations of bedload transport
 # in rivers under relatively low transport rates. The code is split into two
-# parts. Part 1 builds the random streambed surface. Part 2 entrains, deposits
+n# parts. Part 1 builds the random streambed surface. Part 2 entrains, deposits
 # and moves particles along the streambed surface.
 # The code randomly populates a rectangular area of specified dimension with
 # circles of random and nonuniform size. Placement of circles proceeds using
