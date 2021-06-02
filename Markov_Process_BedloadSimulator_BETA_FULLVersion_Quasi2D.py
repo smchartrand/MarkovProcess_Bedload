@@ -22,7 +22,7 @@ Start_time = time.time()
 # This code was developed by Shawn Chartrand and David Furbish, March 2018.
 # The code is the basis of Markov birth-death simulations of bedload transport
 # in rivers under relatively low transport rates. The code is split into two
-# parts. Part 1 builds the random streambed surface. Part 2 entrains, deposits
+n# parts. Part 1 builds the random streambed surface. Part 2 entrains, deposits
 # and moves particles along the streambed surface.
 # The code randomly populates a rectangular area of specified dimension with
 # circles of random and nonuniform size. Placement of circles proceeds using
@@ -288,11 +288,11 @@ plt.show()
 # Need to insert some commands to write files to subdirectory.
 # os.makedirs('\\ScriptTest')
 # fig.savefig('.\ScriptTest\Starting_Bed.pdf', format='pdf', dpi=2400)
-fig.savefig('./ScriptTest/TotalBedMotions00000.png', format='png', dpi=600)
+#fig.savefig('./ScriptTest/TotalBedMotions00000.png', format='png', dpi=600)
 # Save initial results for archiving and plotting.
-np.save('.\ScriptTest\XCenter_Initial', XCenter)
-np.save('.\ScriptTest\YCenter_Initial', YCenter)
-np.save('.\ScriptTest\Radius_Array_Initial', Radius_Array)
+#np.save('.\ScriptTest\XCenter_Initial', XCenter)
+#np.save('.\ScriptTest\YCenter_Initial', YCenter)
+#np.save('.\ScriptTest\Radius_Array_Initial', Radius_Array)
 # END OF PART 1 VIRTUAL BED CREATION
 ###############################################################################
 # PART 2 ######################################################################
@@ -301,7 +301,7 @@ np.save('.\ScriptTest\Radius_Array_Initial', Radius_Array)
 # DATA LISTS
 # Parameter to store coordinate and diameter data from step 1
 Grains = np.vstack((CenterCoord, Diameter, CenterElev))
-np.save('.\ScriptTest\ParticleDetails_Initial', Grains)
+#np.save('.\ScriptTest\ParticleDetails_Initial', Grains)
 # Upstream particle supply rate (particles\t).
 Nu_in = np.zeros([1, 1], dtype=int, order='F')
 # Particle emigration rate (particles\t) at boundaries.
@@ -616,7 +616,7 @@ while Step_2 <= Loops:
         # p1.set_clim([5, 950])
         ax.add_collection(p3)
         plt.show()
-        fig.savefig('./ScriptTest/TotalBedMotionsSqPts0000%d.png' % plot_step, format='png', dpi=600)
+#        fig.savefig('./ScriptTest/TotalBedMotionsSqPts0000%d.png' % plot_step, format='png', dpi=600)
         plot_step = plot_step + 1
 
     ##
@@ -655,16 +655,16 @@ while Step_2 <= Loops:
 #   ax.add_collection(p1)
 #   plt.show()
    # Need to insert some commands to write files to subdirectory.
-   # os.makedirs('\\ScriptTest')
-   #fig.savefig('.\ScriptTest\Entrained_Particles_Step_%d.pdf' % Step_2, format='pdf', dpi=2400)
-   # Save initial results for archiving and plotting.
-#   np.save('.\ScriptTest\XCenter_Entrain_Step_%d' % Step_2, XCenter_entrain)
-#   np.save('.\ScriptTest\YCenter_Entrain_Step_%d' % Step_2, YCenter_entrain)
-#   np.save('.\ScriptTest\Radius_Entrain_Step_%d' % Step_2, E_radius_entrain)
-#   np.save('.\ScriptTest\XHop_Entrain_Step_%d' % Step_2, Hop_XCenter)
-#   np.save('.\ScriptTest\YHop_Entrain_Step_%d' % Step_2, Hop_YCenter)
-#   np.save('.\ScriptTest\Travel_Time_Step_%d' % Step_2, T_p)
-#   np.save('.\ScriptTest\Hop_Distance_Step_%d' % Step_2, L_x)
+#    os.makedirs('\\ScriptTest')
+#    fig.savefig('.\ScriptTest\Entrained_Particles_Step_%d.pdf' % Step_2, format='pdf', dpi=2400)
+       # Save initial results for archiving and plotting.
+#    np.save('.\ScriptTest\XCenter_Entrain_Step_%d' % Step_2, XCenter_entrain)
+#    np.save('.\ScriptTest\YCenter_Entrain_Step_%d' % Step_2, YCenter_entrain)
+#    np.save('.\ScriptTest\Radius_Entrain_Step_%d' % Step_2, E_radius_entrain)
+#    np.save('.\ScriptTest\XHop_Entrain_Step_%d' % Step_2, Hop_XCenter)
+#    np.save('.\ScriptTest\YHop_Entrain_Step_%d' % Step_2, Hop_YCenter)
+#    np.save('.\ScriptTest\Travel_Time_Step_%d' % Step_2, T_p)
+#    np.save('.\ScriptTest\Hop_Distance_Step_%d' % Step_2, L_x)
 
     if Step_2 == Loops:
 
