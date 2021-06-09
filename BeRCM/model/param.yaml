@@ -37,7 +37,7 @@ set_diam: 0.5
 # RANGE: > 0
 # TYPE: INT
 # TESTED: 1, 2, 3, 4, 5-10
-num_subregions: 2
+num_subregions: 4
 
 # The maximum number of levels permitted in stream
 # TESTED: 2, 3, 4, 5,
@@ -71,4 +71,4 @@ sigma: 1
 # n iterations. Set to 1 to record every iteration
 snapshot_interval: 1
 
-height_dependancy: True
+height_dependancy: False
